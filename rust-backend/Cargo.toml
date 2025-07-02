@@ -1,0 +1,26 @@
+[package]
+name = "video_streaming_backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4.3.1"
+actix-cors = "0.6.4"
+serde = { version = "1.0.163", features = ["derive"] }
+serde_json = "1.0.96"
+tokio = { version = "1.28.1", features = ["full"] }
+sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "offline", "chrono", "macros", "json"] }
+dotenv = "0.15.0"
+jsonwebtoken = "8.3.0"
+bcrypt = "0.14.0"
+aws-sdk-s3 = "0.28.0"
+aws-config = "0.55.3"
+tokio-stream = "0.1.14"
+futures = "0.3.28"
+ws = "0.9.2"
+log = "0.4.17"
+env_logger = "0.10.0"
+chrono = { version = "0.4.24", features = ["serde"] }
+aws-types = "0.55.3"
+actix-web-actors = "4.2.0"
+actix = "0.13.5"
