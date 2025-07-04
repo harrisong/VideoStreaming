@@ -128,7 +128,7 @@ struct WatchPartyWebSocket {
 impl actix::Actor for WatchPartyWebSocket {
     type Context = ws::WebsocketContext<Self>;
 
-    fn started(&mut self, ctx: &mut Self::Context) {
+    fn started(&mut self, _ctx: &mut Self::Context) {
         let state = self.state.clone();
         let video_id = self.video_id;
         let tx = self.tx.clone();
@@ -178,16 +178,18 @@ impl actix::StreamHandler<Result<ws::Message, ws::ProtocolError>> for WatchParty
                         video_id,
                     }).unwrap_or_else(|_| text.to_string());
                     // Use a separate async task to handle broadcasting without blocking the current context
-                    let state_clone = state.clone();
                     tokio::spawn(async move {
-                        if let Ok(state_guard) = state_clone.lock().await {
-                            if let Ok(clients) = state_guard.video_clients.lock() {
-                                if let Some(client_list) = clients.get(&video_id) {
-                                    let client_list = client_list.clone();
-                                    for tx in client_list {
-                                        let _ = tx.send(msg_json.clone()).await;
-                                    }
-                                }
+                        // Get the client list and clone it to avoid holding the mutex across await points
+                        let client_list = {
+                            let state_guard = state.lock().await;
+                            let clients = state_guard.video_clients.lock().unwrap();
+                            clients.get(&video_id).cloned()
+                        };
+
+                        // Now send messages if we have clients
+                        if let Some(client_list) = client_list {
+                            for tx in client_list {
+                                let _ = tx.send(msg_json.clone()).await;
                             }
                         }
                     });
