@@ -1,0 +1,10 @@
+/target
+**/*.rs.bk
+Cargo.lock
+.env
+.DS_Store
+/tmp
+*.mp4
+*.webm
+*.jpg
+*.png
