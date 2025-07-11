@@ -47,6 +47,7 @@ services:
       - RUST_LOG=info
     volumes:
       - youtube-scraper-data:/tmp/videos
+      - ./urls_to_scrape:/usr/src/app/urls_to_scrape
     networks:
       - app-network
 

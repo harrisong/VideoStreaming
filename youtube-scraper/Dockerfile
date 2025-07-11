@@ -17,7 +17,10 @@ RUN cp target/release/youtube_scraper /usr/local/bin/youtube_scraper
 # Create a directory for temporary video downloads
 RUN mkdir -p /tmp/videos
 
-WORKDIR /tmp/videos
+WORKDIR /usr/src/app
 
-# Run in server mode by default
-CMD ["youtube_scraper", "--server"]
+# Make the entrypoint script executable
+RUN chmod +x docker-entrypoint.sh
+
+# Use our entrypoint script
+ENTRYPOINT ["./docker-entrypoint.sh"]
