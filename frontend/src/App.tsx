@@ -8,8 +8,7 @@ import UserList from './components/UserList';
 import TagVideos from './components/TagVideos';
 
 function App() {
-  const isAuthenticated = !!localStorage.getItem('token') && !!localStorage.getItem('user');
-
+  // Authentication state can be used for protected routes if needed
   return (
     <Routes>
       <Route path="/login" element={<Login />} />

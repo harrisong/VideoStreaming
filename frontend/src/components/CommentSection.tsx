@@ -19,7 +19,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({ videoId, currentTime })
   const [visibleComments, setVisibleComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [ws, setWs] = useState<WebSocket | null>(null);
 
   useEffect(() => {
     // Fetch comments from backend
@@ -60,8 +59,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({ videoId, currentTime })
       console.log('WebSocket closed');
     };
 
-    setWs(websocket);
-
     return () => {
       websocket.close();
     };
@@ -81,7 +78,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({ videoId, currentTime })
     if (newlyVisible.length > 0) {
       setVisibleComments(prev => [...prev, ...newlyVisible].sort((a, b) => a.video_time - b.video_time));
     }
-  }, [currentTime, comments]);
+  }, [currentTime, comments, visibleComments]);
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
