@@ -19,7 +19,9 @@ You can also use short options:
 youtube_scraper -u "https://www.youtube.com/watch?v=VIDEO_ID" -i 1
 ```
 
-## API Endpoint
+## API Endpoints
+
+### Submit a scraping job
 
 ```
 POST /api/scrape
@@ -30,3 +32,115 @@ POST /api/scrape
   "tags": ["tag1", "tag2"],
   "user_id": 1
 }
+```
+
+Response:
+```json
+{
+  "job_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+### Check job status
+
+```
+GET /api/jobs/{job_id}
+```
+
+Response (job queued):
+```json
+{
+  "Queued": null
+}
+```
+
+Response (job in progress):
+```json
+{
+  "Processing": null
+}
+```
+
+Response (job completed):
+```json
+{
+  "Completed": {
+    "video_id": 123,
+    "title": "Video Title",
+    "s3_key": "videos/uuid.mp4",
+    "thumbnail_url": "thumbnails/uuid.jpg"
+  }
+}
+```
+
+Response (job failed):
+```json
+{
+  "Failed": "Error message describing what went wrong"
+}
+```
+
+### Check service status
+
+```
+POST /api/status
+```
+
+Response:
+```json
+{
+  "status": "running"
+}
+```
+
+## Asynchronous Processing
+
+The YouTube scraper now processes video downloads asynchronously:
+
+1. Submit a job using the `/api/scrape` endpoint
+2. Receive a job ID in the response
+3. Poll the job status using the `/api/jobs/{job_id}` endpoint
+4. When the job status is "Completed", the video has been successfully downloaded, uploaded to MinIO, and added to the database
+
+This asynchronous approach allows for better handling of long-running downloads and prevents timeouts when processing large videos.
+
+## Example with curl
+
+### Submit a job:
+
+```bash
+curl -X POST http://localhost:5060/api/scrape \
+  -H "Content-Type: application/json" \
+  -d '{
+    "youtube_url": "https://www.youtube.com/watch?v=Kz1vI2uUhLw",
+    "title": null,
+    "description": null,
+    "tags": ["demo"],
+    "user_id": 1
+  }'
+```
+
+Response:
+```json
+{
+  "job_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+### Check job status:
+
+```bash
+curl -X GET http://localhost:5060/api/jobs/123e4567-e89b-12d3-a456-426614174000
+```
+
+Response (when completed):
+```json
+{
+  "Completed": {
+    "video_id": 123,
+    "title": "Example Video Title",
+    "s3_key": "videos/uuid.mp4",
+    "thumbnail_url": "thumbnails/uuid.jpg"
+  }
+}
+```

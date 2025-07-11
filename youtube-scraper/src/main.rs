@@ -1,16 +1,64 @@
-use actix_web::{web, App, HttpServer, HttpResponse, Responder, post, middleware};
+use actix_web::{web, App, HttpServer, HttpResponse, Responder, post, get, middleware};
 use actix_cors::Cors;
 use dotenv::dotenv;
 use log::{info, error};
 use sqlx::{PgPool};
 use std::env;
+use std::sync::Arc;
 use aws_sdk_s3::Client as S3Client;
 use aws_sdk_s3::config::Credentials;
 use aws_types::region::Region;
 use clap::Parser;
+use serde::{Serialize, Deserialize};
 
 mod models;
 mod scraper;
+mod job_queue;
+
+use job_queue::JobQueue;
+
+#[derive(Debug, Serialize, Deserialize)]
+struct JobResponse {
+    job_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct JobStatusRequest {
+    job_id: String,
+}
+
+#[post("/api/scrape")]
+async fn scrape_video(
+    req: web::Json<scraper::ScrapeRequest>,
+    job_queue: web::Data<Arc<JobQueue>>,
+) -> impl Responder {
+    // Add the job to the queue
+    let job_id = job_queue.add_job(req.into_inner()).await;
+    
+    HttpResponse::Accepted().json(JobResponse { job_id })
+}
+
+#[get("/api/jobs/{job_id}")]
+async fn get_job_status(
+    path: web::Path<String>,
+    job_queue: web::Data<Arc<JobQueue>>,
+) -> impl Responder {
+    let job_id = path.into_inner();
+    
+    match job_queue.get_job_status(&job_id).await {
+        Some(status) => HttpResponse::Ok().json(status),
+        None => HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Job not found"
+        }))
+    }
+}
+
+#[post("/api/status")]
+async fn scrape_status() -> impl Responder {
+    HttpResponse::Ok().json(serde_json::json!({
+        "status": "running"
+    }))
+}
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -41,6 +89,18 @@ async fn main() -> std::io::Result<()> {
     let s3_client = init_s3_client().await;
 
     if args.server {
+        // Create job queue
+        let job_queue = Arc::new(JobQueue::new());
+        
+        // Start worker thread
+        let worker_db_pool = db_pool.clone();
+        let worker_s3_client = s3_client.clone();
+        let worker_job_queue = job_queue.clone();
+        tokio::spawn(async move {
+            let scraper = scraper::YoutubeScraper::new(worker_db_pool, worker_s3_client);
+            job_queue::start_worker(worker_job_queue, scraper).await;
+        });
+        
         // Run as API server
         info!("Starting YouTube scraper API server on 0.0.0.0:5060");
         HttpServer::new(move || {
@@ -54,7 +114,9 @@ async fn main() -> std::io::Result<()> {
                 .wrap(middleware::Logger::default())
                 .app_data(web::Data::new(db_pool.clone()))
                 .app_data(web::Data::new(s3_client.clone()))
+                .app_data(web::Data::new(job_queue.clone()))
                 .service(scrape_video)
+                .service(get_job_status)
                 .service(scrape_status)
         })
         .bind(("0.0.0.0", 5060))?
@@ -86,32 +148,6 @@ async fn main() -> std::io::Result<()> {
         error!("No YouTube URL provided. Use --url to specify a URL or --server to run in server mode.");
         std::process::exit(1);
     }
-}
-
-#[post("/api/scrape")]
-async fn scrape_video(
-    req: web::Json<scraper::ScrapeRequest>,
-    db_pool: web::Data<PgPool>,
-    s3_client: web::Data<S3Client>,
-) -> impl Responder {
-    let scraper = scraper::YoutubeScraper::new(db_pool.get_ref().clone(), s3_client.get_ref().clone());
-    
-    match scraper.scrape_video(req.into_inner()).await {
-        Ok(response) => HttpResponse::Ok().json(response),
-        Err(e) => {
-            error!("Error scraping video: {}", e);
-            HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": e
-            }))
-        }
-    }
-}
-
-#[post("/api/status")]
-async fn scrape_status() -> impl Responder {
-    HttpResponse::Ok().json(serde_json::json!({
-        "status": "running"
-    }))
 }
 
 async fn init_db_pool() -> PgPool {

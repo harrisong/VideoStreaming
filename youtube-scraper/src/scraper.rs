@@ -15,7 +15,7 @@ pub struct YoutubeScraper {
     s3_client: S3Client,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ScrapeRequest {
     pub youtube_url: String,
     pub title: Option<String>,
@@ -24,7 +24,7 @@ pub struct ScrapeRequest {
     pub user_id: Option<i32>,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ScrapeResponse {
     pub video_id: i32,
     pub title: String,
