@@ -111,6 +111,7 @@ jobs:
           MINIO_ACCESS_KEY: minio
           MINIO_SECRET_KEY: minio123
           MINIO_BUCKET: videos
+          RUST_BACKTRACE: 1
         run: |
           cargo build --release
           cargo test
