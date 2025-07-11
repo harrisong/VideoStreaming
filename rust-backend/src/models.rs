@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use chrono::NaiveDateTime;
+use sqlx::FromRow;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: i32,
     pub username: String,
@@ -23,7 +24,7 @@ pub struct RegisterRequest {
     pub password: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Video {
     pub id: i32,
     pub title: String,
@@ -36,7 +37,7 @@ pub struct Video {
     pub view_count: Option<i32>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Comment {
     pub id: i32,
     pub video_id: i32,

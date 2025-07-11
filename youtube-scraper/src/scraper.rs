@@ -236,21 +236,20 @@ impl YoutubeScraper {
         tags: &[String],
     ) -> Result<DbVideo, sqlx::Error> {
         // Insert the video metadata into the database
-        sqlx::query_as!(
-            DbVideo,
+        sqlx::query_as::<_, DbVideo>(
             r#"
             INSERT INTO videos (title, description, s3_key, thumbnail_url, uploaded_by, upload_date, tags)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id, title, description, s3_key, thumbnail_url, uploaded_by, upload_date, tags, view_count
-            "#,
-            title,
-            description,
-            s3_key,
-            thumbnail_url,
-            uploaded_by,
-            chrono::Utc::now().naive_utc(),
-            tags as _
+            "#
         )
+        .bind(title)
+        .bind(description)
+        .bind(s3_key)
+        .bind(thumbnail_url)
+        .bind(uploaded_by)
+        .bind(chrono::Utc::now().naive_utc())
+        .bind(tags)
         .fetch_one(&self.db_pool)
         .await
     }

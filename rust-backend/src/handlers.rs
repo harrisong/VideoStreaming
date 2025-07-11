@@ -17,14 +17,13 @@ async fn register(
 ) -> impl Responder {
     let state = state.lock().await;
     let hashed_password = bcrypt::hash(&req.password, bcrypt::DEFAULT_COST).unwrap();
-    let result = sqlx::query_as!(
-        User,
-        "INSERT INTO users (username, email, password, created_at) VALUES ($1, $2, $3, $4) RETURNING id, username, email, password, created_at",
-        req.username,
-        req.email,
-        hashed_password,
-        chrono::Utc::now().naive_utc()
+    let result = sqlx::query_as::<_, User>(
+        "INSERT INTO users (username, email, password, created_at) VALUES ($1, $2, $3, $4) RETURNING id, username, email, password, created_at"
     )
+    .bind(&req.username)
+    .bind(&req.email)
+    .bind(&hashed_password)
+    .bind(chrono::Utc::now().naive_utc())
     .fetch_one(&state.db_pool)
     .await;
 
@@ -69,11 +68,10 @@ async fn login(
     state: web::Data<Arc<Mutex<AppState>>>,
 ) -> impl Responder {
     let state = state.lock().await;
-    let result = sqlx::query_as!(
-        User,
-        "SELECT * FROM users WHERE email = $1",
-        req.username
+    let result = sqlx::query_as::<_, User>(
+        "SELECT * FROM users WHERE email = $1"
     )
+    .bind(&req.username)
     .fetch_one(&state.db_pool)
     .await;
 
@@ -132,7 +130,7 @@ async fn auth_status() -> impl Responder {
 #[get("/api/videos")]
 async fn get_videos(state: web::Data<Arc<Mutex<AppState>>>) -> actix_web::HttpResponse {
     let state = state.lock().await;
-    let result = sqlx::query_as!(Video, "SELECT * FROM videos ORDER BY upload_date DESC")
+    let result = sqlx::query_as::<_, Video>("SELECT * FROM videos ORDER BY upload_date DESC")
         .fetch_all(&state.db_pool)
         .await;
 
@@ -154,7 +152,8 @@ async fn get_video(
 ) -> actix_web::HttpResponse {
     let state = state.lock().await;
     let video_id = path.into_inner();
-    let update_result = sqlx::query!("UPDATE videos SET view_count = view_count + 1 WHERE id = $1", video_id)
+    let update_result = sqlx::query("UPDATE videos SET view_count = view_count + 1 WHERE id = $1")
+        .bind(video_id)
         .execute(&state.db_pool)
         .await;
 
@@ -165,7 +164,8 @@ async fn get_video(
         }));
     }
 
-    let result = sqlx::query_as!(Video, "SELECT * FROM videos WHERE id = $1", video_id)
+    let result = sqlx::query_as::<_, Video>("SELECT * FROM videos WHERE id = $1")
+        .bind(video_id)
         .fetch_one(&state.db_pool)
         .await;
 
@@ -187,7 +187,8 @@ async fn get_videos_by_tag(
 ) -> actix_web::HttpResponse {
     let state = state.lock().await;
     let tag = path.into_inner();
-    let result = sqlx::query_as!(Video, "SELECT * FROM videos WHERE $1 = ANY(tags)", tag)
+    let result = sqlx::query_as::<_, Video>("SELECT * FROM videos WHERE $1 = ANY(tags)")
+        .bind(&tag)
         .fetch_all(&state.db_pool)
         .await;
 
@@ -209,16 +210,19 @@ async fn stream_video(
 ) -> impl Responder {
     let state = state.lock().await;
     let video_id = path.into_inner();
-    let video_result = sqlx::query!("SELECT s3_key FROM videos WHERE id = $1", video_id)
+    let video_result = sqlx::query_as::<_, Video>("SELECT * FROM videos WHERE id = $1")
+        .bind(video_id)
         .fetch_one(&state.db_pool)
         .await;
 
     match video_result {
         Ok(video) => {
+            let s3_key = video.s3_key;
+            
             let bucket_name = env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
             let get_object_output = state.s3_client.get_object()
                 .bucket(bucket_name)
-                .key(video.s3_key)
+                .key(s3_key)
                 .send()
                 .await;
 
@@ -285,15 +289,14 @@ async fn post_comment(
     // Log the incoming request for debugging
     info!("Received comment request for video_id: {}, user_id: {}, text: {}, video_time: {}", video_id, user_id, json_req.text, json_req.video_time);
 
-    let result = sqlx::query_as!(
-        Comment,
-        "INSERT INTO comments (video_id, user_id, content, video_time, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-        video_id,
-        user_id,
-        json_req.text,
-        json_req.video_time,
-        chrono::Utc::now().naive_utc()
+    let result = sqlx::query_as::<_, Comment>(
+        "INSERT INTO comments (video_id, user_id, content, video_time, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING *"
     )
+    .bind(video_id)
+    .bind(user_id)
+    .bind(&json_req.text)
+    .bind(json_req.video_time)
+    .bind(chrono::Utc::now().naive_utc())
     .fetch_one(&state.db_pool)
     .await;
 
@@ -319,7 +322,8 @@ async fn get_comments(
 ) -> actix_web::HttpResponse {
     let state = state.lock().await;
     let video_id = path.into_inner();
-    let result = sqlx::query_as!(Comment, "SELECT * FROM comments WHERE video_id = $1 ORDER BY video_time ASC", video_id)
+    let result = sqlx::query_as::<_, Comment>("SELECT * FROM comments WHERE video_id = $1 ORDER BY video_time ASC")
+        .bind(video_id)
         .fetch_all(&state.db_pool)
         .await;
 

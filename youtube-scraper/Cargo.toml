@@ -9,7 +9,7 @@ actix-cors = "0.6.4"
 serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.96"
 tokio = { version = "1.28.1", features = ["full"] }
-sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "offline", "chrono", "macros", "json"] }
+sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "offline", "chrono", "macros", "json"], default-features = false }
 dotenv = "0.15.0"
 rustube = "0.6.0"
 url = "2.4.0"
