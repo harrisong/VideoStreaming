@@ -10,7 +10,6 @@ use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use crate::models::Video as DbVideo;
 use reqwest;
-use serde_json::Value;
 
 pub struct YoutubeScraper {
     db_pool: PgPool,

@@ -127,6 +127,13 @@ async fn auth_status() -> impl Responder {
     }))
 }
 
+#[get("/api/status")]
+async fn status() -> impl Responder {
+    web::Json(json!({
+        "status": "running"
+    }))
+}
+
 #[get("/api/videos")]
 async fn get_videos(state: web::Data<Arc<Mutex<AppState>>>) -> actix_web::HttpResponse {
     let state = state.lock().await;
@@ -442,6 +449,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
        .service(login)
        .service(logout)
        .service(auth_status)
+       .service(status)
        .service(get_videos)
        .service(get_video)
        .service(get_videos_by_tag)

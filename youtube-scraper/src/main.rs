@@ -57,7 +57,6 @@ async fn search_videos(
             info!("Found {} videos for query: {}", video_urls.len(), query);
             
             // Add each video URL to the job queue
-            let mut job_ids = Vec::new();
             let mut futures = Vec::new();
             
             for url in video_urls {
@@ -73,7 +72,7 @@ async fn search_videos(
             }
             
             // Wait for all jobs to be added
-            job_ids = join_all(futures).await;
+            let job_ids = join_all(futures).await;
             
             HttpResponse::Accepted().json(scraper::SearchResponse { job_ids })
         },
