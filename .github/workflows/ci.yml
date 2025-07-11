@@ -182,8 +182,14 @@ jobs:
           cargo run --release -- --server &
           SCRAPER_PID=$!
           
+          # Check if scraper is running
+          if ! ps -p $SCRAPER_PID > /dev/null; then
+            echo "Scraper process is not running!"
+            exit 1
+          fi
+          
           # Wait for scraper to start
-          sleep 5
+          sleep 15
           
           # Test that services are running with the correct endpoints
           echo "Testing backend status..."
