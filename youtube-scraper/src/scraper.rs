@@ -1,6 +1,6 @@
 use std::env;
+use std::process::Command;
 use log::{info};
-use rustube::{IdBuf, VideoFetcher};
 use url::Url;
 use uuid::Uuid;
 use sqlx::PgPool;
@@ -55,7 +55,7 @@ impl YoutubeScraper {
 
         info!("Downloading YouTube video with ID: {}", video_id);
 
-        // Download video using rustube
+        // Download video using yt-dlp
         let video = match self.download_video(&video_id).await {
             Ok(v) => v,
             Err(e) => return Err(format!("Failed to download video: {}", e)),
@@ -114,63 +114,59 @@ impl YoutubeScraper {
     }
 
     async fn download_video(&self, video_id: &str) -> Result<(Vec<u8>, String), String> {
-        // Use rustube to download the video
-        let id_buf = match IdBuf::from_string(video_id.to_string()) {
-            Ok(id_buf) => id_buf,
-            Err(e) => return Err(format!("Failed to create IdBuf from video_id: {}", e)),
-        };
+        // Create a temporary file path
+        let output_path = format!("/tmp/videos/{}.mp4", Uuid::new_v4());
         
-        let fetcher = match VideoFetcher::from_id(id_buf) {
-            Ok(fetcher) => fetcher,
-            Err(e) => return Err(format!("Failed to create VideoFetcher from video_id: {}", e)),
-        };
+        // Run yt-dlp to download the video
+        let status = Command::new("/opt/venv/bin/yt-dlp")
+            .args(&[
+                "-f", "best", // Get the best quality
+                "-o", &output_path,
+                &format!("https://www.youtube.com/watch?v={}", video_id),
+            ])
+            .status()
+            .map_err(|e| format!("Failed to execute yt-dlp: {}", e))?;
         
-        let descrambler = match fetcher.fetch().await {
-            Ok(descrambler) => descrambler,
-            Err(e) => return Err(format!("Failed to fetch video: {}", e)),
-        };
-
-        let video = match descrambler.descramble() {
-            Ok(video) => video,
-            Err(e) => return Err(format!("Failed to descramble video: {}", e)),
-        };
-
-        // Get the best quality video stream
-        let best_quality = match video.best_quality() {
-            Some(quality) => quality,
-            None => return Err("No video streams available".to_string()),
-        };
-
-        // Download the video
-        let path = match best_quality.download_to_dir(".").await {
-            Ok(path) => path,
-            Err(e) => return Err(format!("Failed to download video: {}", e)),
-        };
-
-        // Read the video file into memory
-        let mut file = match File::open(&path).await {
-            Ok(file) => file,
-            Err(e) => return Err(format!("Failed to open downloaded video file: {}", e)),
-        };
-
-        let mut buffer = Vec::new();
-        if let Err(e) = file.read_to_end(&mut buffer).await {
-            return Err(format!("Failed to read video file: {}", e));
+        if !status.success() {
+            return Err(format!("yt-dlp failed with exit code: {:?}", status.code()));
         }
-
+        
         // Get the video title
-        let title = video.title().to_string();
-
+        let output = Command::new("/opt/venv/bin/yt-dlp")
+            .args(&[
+                "--get-title",
+                &format!("https://www.youtube.com/watch?v={}", video_id),
+            ])
+            .output()
+            .map_err(|e| format!("Failed to get video title: {}", e))?;
+        
+        let title = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        
+        // Read the video file into memory
+        let mut file = File::open(&output_path).await
+            .map_err(|e| format!("Failed to open downloaded video file: {}", e))?;
+        
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer).await
+            .map_err(|e| format!("Failed to read video file: {}", e))?;
+        
         // Clean up the downloaded file
-        if let Err(e) = tokio::fs::remove_file(&path).await {
-            info!("Failed to remove temporary file {}: {}", path.display(), e);
+        if let Err(e) = tokio::fs::remove_file(&output_path).await {
+            info!("Failed to remove temporary file {}: {}", output_path, e);
         }
-
+        
         Ok((buffer, title))
     }
 
     async fn upload_to_minio(&self, video_data: &[u8], s3_key: &str) -> Result<(), String> {
         let bucket_name = env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
+        
+        // Log the MinIO configuration for debugging
+        info!("MinIO configuration:");
+        info!("  Endpoint: {}", std::env::var("MINIO_ENDPOINT").unwrap_or_else(|_| "Not set".to_string()));
+        info!("  Access Key: {}", std::env::var("MINIO_ACCESS_KEY").unwrap_or_else(|_| "Not set".to_string()));
+        info!("  Secret Key: {}", std::env::var("MINIO_SECRET_KEY").unwrap_or_else(|_| "Not set".to_string()));
+        info!("  Bucket: {}", bucket_name);
         
         // Create a ByteStream from the video data
         let byte_stream = ByteStream::from(video_data.to_vec());
@@ -211,6 +207,13 @@ impl YoutubeScraper {
         // Generate a unique S3 key for the thumbnail
         let s3_key = format!("thumbnails/{}.jpg", Uuid::new_v4());
         let bucket_name = env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
+        
+        // Log the MinIO configuration for debugging
+        info!("MinIO configuration for thumbnail:");
+        info!("  Endpoint: {}", std::env::var("MINIO_ENDPOINT").unwrap_or_else(|_| "Not set".to_string()));
+        info!("  Access Key: {}", std::env::var("MINIO_ACCESS_KEY").unwrap_or_else(|_| "Not set".to_string()));
+        info!("  Secret Key: {}", std::env::var("MINIO_SECRET_KEY").unwrap_or_else(|_| "Not set".to_string()));
+        info!("  Bucket: {}", bucket_name);
         
         // Upload the thumbnail to MinIO
         match self.s3_client.put_object()

@@ -1,7 +1,12 @@
 FROM rust:1.88
 
 # Install dependencies
-RUN apt-get update && apt-get install -y ca-certificates libssl-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates libssl-dev python3 python3-pip python3-venv && rm -rf /var/lib/apt/lists/*
+
+# Create a virtual environment and install yt-dlp
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install yt-dlp
 
 WORKDIR /usr/src/app
 COPY . .

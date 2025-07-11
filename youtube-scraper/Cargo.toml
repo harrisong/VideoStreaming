@@ -11,7 +11,6 @@ serde_json = "1.0.96"
 tokio = { version = "1.28.1", features = ["full"] }
 sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "offline", "chrono", "macros", "json"], default-features = false }
 dotenv = "0.15.0"
-rustube = "0.6.0"
 url = "2.4.0"
 uuid = { version = "1.3.3", features = ["v4"] }
 bytes = "1.4.0"
