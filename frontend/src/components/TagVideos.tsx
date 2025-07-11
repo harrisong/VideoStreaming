@@ -2,10 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from './Navbar';
 
-const TagVideos: React.FC = () => {
+interface Video {
+  id: string;
+  title: string;
+  description: string;
+  thumbnail_url: string;
+  view_count: number;
+  tags: string[];
+}
+
+const TagVideos = () => {
   const { tag } = useParams<{ tag: string }>();
   const navigate = useNavigate();
-  const [videos, setVideos] = useState<any[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
 
   useEffect(() => {
     const fetchVideosByTag = async () => {
@@ -28,9 +37,13 @@ const TagVideos: React.FC = () => {
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <h2 className="text-2xl font-bold mb-4">Videos tagged with: {tag}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {videos.map((video) => (
+          {videos.map((video: Video) => (
             <div key={video.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-              <img src={video.thumbnail} alt={video.title} className="w-full h-48 object-cover" />
+              <img 
+                src={video.thumbnail_url ? `http://localhost:5050/api/thumbnails/${video.thumbnail_url.split('/').pop()}` : ''} 
+                alt={video.title} 
+                className="w-full h-48 object-cover" 
+              />
               <div className="p-4">
                 <h3 className="font-bold text-lg mb-2 text-gray-900">{video.title}</h3>
                 <p className="text-gray-700 text-sm">{video.description}</p>

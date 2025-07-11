@@ -28,7 +28,11 @@ const Home: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {videos.map((video) => (
             <div key={video.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-              <img src={video.thumbnail} alt={video.title} className="w-full h-48 object-cover" />
+              <img 
+                src={video.thumbnail_url ? `http://localhost:5050/api/thumbnails/${video.thumbnail_url.split('/').pop()}` : ''} 
+                alt={video.title} 
+                className="w-full h-48 object-cover" 
+              />
               <div className="p-4">
                 <h3 className="font-bold text-lg mb-2 text-gray-900">{video.title}</h3>
                 <p className="text-gray-700 text-sm">{video.description}</p>
