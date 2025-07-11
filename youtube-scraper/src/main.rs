@@ -43,7 +43,7 @@ async fn scrape_video(
 async fn search_videos(
     req: web::Json<scraper::SearchRequest>,
     job_queue: web::Data<Arc<JobQueue>>,
-    scraper: web::Data<scraper::YoutubeScraper>,
+    scraper: web::Data<Arc<scraper::YoutubeScraper>>,
 ) -> impl Responder {
     let query = req.query.clone();
     let max_results = req.max_results.unwrap_or(10);
@@ -52,7 +52,7 @@ async fn search_videos(
     info!("Searching YouTube for: {}", query);
     
     // Search for videos
-    match scraper.search_videos(&query, max_results).await {
+    match scraper.as_ref().search_videos(&query, max_results).await {
         Ok(video_urls) => {
             info!("Found {} videos for query: {}", video_urls.len(), query);
             
