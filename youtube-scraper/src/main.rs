@@ -138,7 +138,7 @@ async fn main() -> std::io::Result<()> {
 
     if args.server {
         // Create job queue
-        let job_queue = Arc::new(JobQueue::new());
+        let job_queue = Arc::new(JobQueue::new(db_pool.clone()));
         
         // Start worker thread
         let worker_db_pool = db_pool.clone();
