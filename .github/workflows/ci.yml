@@ -29,19 +29,18 @@ jobs:
       
       # MinIO service
       minio:
-        image: minio/minio
+        image: bitnami/minio:latest
         env:
-          MINIO_ROOT_USER: minio
-          MINIO_ROOT_PASSWORD: minio123
+          MINIO_ACCESS_KEY: minio
+          MINIO_SECRET_KEY: minio123
         ports:
           - 9000:9000
           - 9001:9001
         options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-cmd "timeout 5 bash -c 'cat < /dev/null > /dev/tcp/localhost/9000'"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-          --entrypoint "sh -c 'mkdir -p /data && minio server /data --console-address \":9001\"'"
 
     steps:
       - name: Checkout code
@@ -50,6 +49,8 @@ jobs:
       # Initialize database with schema
       - name: Initialize database
         run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
           PGPASSWORD=postgres psql -h localhost -U postgres -d video_streaming_db -f init-db.sql
 
       # Setup Node.js for frontend
