@@ -31,8 +31,8 @@ jobs:
       minio:
         image: bitnami/minio:latest
         env:
-          MINIO_ACCESS_KEY: minio
-          MINIO_SECRET_KEY: minio123
+          MINIO_ROOT_USER: minio
+          MINIO_ROOT_PASSWORD: minio123
         ports:
           - 9000:9000
           - 9001:9001
@@ -151,7 +151,14 @@ jobs:
         run: |
           # Create the videos bucket in MinIO
           pip install minio
-          python -c "from minio import Minio; client = Minio('localhost:9000', access_key='minio', secret_key='minio123', secure=False); client.make_bucket('videos') if not client.bucket_exists('videos') else None"
+          # Wait for MinIO to be fully ready
+          sleep 5
+          # Try multiple times to create the bucket
+          for i in {1..5}; do
+            echo "Attempt $i to create MinIO bucket..."
+            python -c "from minio import Minio; client = Minio('localhost:9000', access_key='minio', secret_key='minio123', secure=False); client.make_bucket('videos') if not client.bucket_exists('videos') else None" && break
+            sleep 5
+          done
           
           # Start the backend in the background
           cd rust-backend
