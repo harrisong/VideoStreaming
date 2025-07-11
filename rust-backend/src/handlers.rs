@@ -399,6 +399,44 @@ async fn control_watch_party(
     }))
 }
 
+#[get("/api/thumbnails/{thumbnail_key}")]
+async fn get_thumbnail(
+    path: web::Path<String>,
+    state: web::Data<Arc<Mutex<AppState>>>,
+) -> impl Responder {
+    let state = state.lock().await;
+    let thumbnail_key = path.into_inner();
+    
+    // Prepend "thumbnails/" if it's not already there
+    let s3_key = if thumbnail_key.starts_with("thumbnails/") {
+        thumbnail_key
+    } else {
+        format!("thumbnails/{}", thumbnail_key)
+    };
+    
+    let bucket_name = env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
+    let get_object_output = state.s3_client.get_object()
+        .bucket(bucket_name)
+        .key(s3_key)
+        .send()
+        .await;
+
+    match get_object_output {
+        Ok(output) => {
+            let body = output.body.collect().await.unwrap().into_bytes();
+            actix_web::HttpResponse::Ok()
+                .content_type("image/jpeg")
+                .body(body)
+        }
+        Err(e) => {
+            error!("Error fetching thumbnail from MinIO: {:?}", e);
+            actix_web::HttpResponse::NotFound().json(json!({
+                "error": "Thumbnail not found"
+            }))
+        }
+    }
+}
+
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(register)
        .service(login)
@@ -411,5 +449,6 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
        .service(post_comment)
        .service(get_comments)
        .service(join_watch_party)
-       .service(control_watch_party);
+       .service(control_watch_party)
+       .service(get_thumbnail);
 }
