@@ -1,0 +1,215 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    services:
+      # PostgreSQL service
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: video_streaming_db
+        ports:
+          - 5432:5432
+        # Health check to wait for postgres to start
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      # MinIO service
+      minio:
+        image: minio/minio
+        env:
+          MINIO_ROOT_USER: minio
+          MINIO_ROOT_PASSWORD: minio123
+        ports:
+          - 9000:9000
+          - 9001:9001
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --entrypoint "sh -c 'mkdir -p /data && minio server /data --console-address \":9001\"'"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Initialize database with schema
+      - name: Initialize database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d video_streaming_db -f init-db.sql
+
+      # Setup Node.js for frontend
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      # Build frontend
+      - name: Build frontend
+        working-directory: ./frontend
+        run: |
+          npm ci
+          npm run build
+
+      # Setup Rust for backend and scraper
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+
+      # Install sqlx-cli for migrations
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres
+
+      # Cache Rust dependencies
+      - name: Cache Rust dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust-backend/target
+            youtube-scraper/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # Apply migrations to the database
+      - name: Apply migrations
+        working-directory: ./rust-backend
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/video_streaming_db
+        run: |
+          sqlx migrate run
+
+      # Build and test rust-backend
+      - name: Build and test rust-backend
+        working-directory: ./rust-backend
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/video_streaming_db
+          JWT_SECRET: secure_jwt_secret_key_12345
+          MINIO_ENDPOINT: http://localhost:9000
+          MINIO_ACCESS_KEY: minio
+          MINIO_SECRET_KEY: minio123
+          MINIO_BUCKET: videos
+        run: |
+          cargo build --release
+          cargo test
+
+      # Build and test youtube-scraper
+      - name: Build and test youtube-scraper
+        working-directory: ./youtube-scraper
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/video_streaming_db
+          MINIO_ENDPOINT: http://localhost:9000
+          MINIO_ACCESS_KEY: minio
+          MINIO_SECRET_KEY: minio123
+          MINIO_BUCKET: videos
+          RUST_LOG: info
+        run: |
+          cargo build --release
+          cargo test
+
+      # Install Python and yt-dlp for youtube-scraper
+      - name: Setup Python and yt-dlp
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - run: |
+          python -m pip install --upgrade pip
+          python -m pip install yt-dlp
+
+      # Integration test - Start services and verify they work together
+      - name: Integration test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/video_streaming_db
+          JWT_SECRET: secure_jwt_secret_key_12345
+          MINIO_ENDPOINT: http://localhost:9000
+          MINIO_ACCESS_KEY: minio
+          MINIO_SECRET_KEY: minio123
+          MINIO_BUCKET: videos
+          RUST_LOG: info
+        run: |
+          # Create the videos bucket in MinIO
+          pip install minio
+          python -c "from minio import Minio; client = Minio('localhost:9000', access_key='minio', secret_key='minio123', secure=False); client.make_bucket('videos') if not client.bucket_exists('videos') else None"
+          
+          # Start the backend in the background
+          cd rust-backend
+          cargo run --release &
+          BACKEND_PID=$!
+          
+          # Wait for backend to start
+          sleep 5
+          
+          # Start the youtube-scraper in the background
+          cd ../youtube-scraper
+          cargo run --release -- --server &
+          SCRAPER_PID=$!
+          
+          # Wait for scraper to start
+          sleep 5
+          
+          # Test that services are running
+          curl -s http://localhost:5050/api/status | grep -q "running" || { echo "Backend not running"; exit 1; }
+          curl -s http://localhost:5060/api/status | grep -q "running" || { echo "Scraper not running"; exit 1; }
+          
+          # Clean up
+          kill $BACKEND_PID
+          kill $SCRAPER_PID
+
+  # Docker build job
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Build and push frontend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/video-streaming-frontend:latest
+      
+      - name: Build and push backend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./rust-backend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/video-streaming-backend:latest
+      
+      - name: Build and push youtube-scraper
+        uses: docker/build-push-action@v4
+        with:
+          context: ./youtube-scraper
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/video-streaming-scraper:latest
