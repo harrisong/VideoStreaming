@@ -25,3 +25,4 @@ chrono = { version = "0.4.24", features = ["serde"] }
 clap = { version = "4.3.0", features = ["derive"] }
 futures = "0.3.28"
 tokio-stream = "0.1.14"
+urlencoding = "2.1.3"

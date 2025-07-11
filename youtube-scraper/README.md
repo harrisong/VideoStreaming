@@ -41,6 +41,30 @@ Response:
 }
 ```
 
+### Search YouTube and queue videos
+
+```
+POST /api/search
+{
+  "query": "search term",
+  "max_results": 10,
+  "user_id": 1
+}
+```
+
+Response:
+```json
+{
+  "job_ids": [
+    "123e4567-e89b-12d3-a456-426614174000",
+    "223e4567-e89b-12d3-a456-426614174001",
+    "323e4567-e89b-12d3-a456-426614174002"
+  ]
+}
+```
+
+This endpoint searches YouTube for videos matching the query, and automatically queues them for scraping. The `max_results` parameter is optional and defaults to 10. The `user_id` parameter is optional.
+
 ### Check job status
 
 ```
@@ -124,6 +148,31 @@ Response:
 ```json
 {
   "job_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+### Search YouTube and queue videos:
+
+```bash
+curl -X POST http://localhost:5060/api/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "funny cats",
+    "max_results": 5,
+    "user_id": 1
+  }'
+```
+
+Response:
+```json
+{
+  "job_ids": [
+    "123e4567-e89b-12d3-a456-426614174000",
+    "223e4567-e89b-12d3-a456-426614174001",
+    "323e4567-e89b-12d3-a456-426614174002",
+    "423e4567-e89b-12d3-a456-426614174003",
+    "523e4567-e89b-12d3-a456-426614174004"
+  ]
 }
 ```
 

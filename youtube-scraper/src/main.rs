@@ -10,6 +10,7 @@ use aws_sdk_s3::config::Credentials;
 use aws_types::region::Region;
 use clap::Parser;
 use serde::{Serialize, Deserialize};
+use futures::future::join_all;
 
 mod models;
 mod scraper;
@@ -36,6 +37,53 @@ async fn scrape_video(
     let job_id = job_queue.add_job(req.into_inner()).await;
     
     HttpResponse::Accepted().json(JobResponse { job_id })
+}
+
+#[post("/api/search")]
+async fn search_videos(
+    req: web::Json<scraper::SearchRequest>,
+    job_queue: web::Data<Arc<JobQueue>>,
+    scraper: web::Data<scraper::YoutubeScraper>,
+) -> impl Responder {
+    let query = req.query.clone();
+    let max_results = req.max_results.unwrap_or(10);
+    let user_id = req.user_id;
+    
+    info!("Searching YouTube for: {}", query);
+    
+    // Search for videos
+    match scraper.search_videos(&query, max_results).await {
+        Ok(video_urls) => {
+            info!("Found {} videos for query: {}", video_urls.len(), query);
+            
+            // Add each video URL to the job queue
+            let mut job_ids = Vec::new();
+            let mut futures = Vec::new();
+            
+            for url in video_urls {
+                let scrape_request = scraper::ScrapeRequest {
+                    youtube_url: url,
+                    title: None,
+                    description: None,
+                    tags: Some(vec![query.clone()]),
+                    user_id,
+                };
+                
+                futures.push(job_queue.add_job(scrape_request));
+            }
+            
+            // Wait for all jobs to be added
+            job_ids = join_all(futures).await;
+            
+            HttpResponse::Accepted().json(scraper::SearchResponse { job_ids })
+        },
+        Err(e) => {
+            error!("Failed to search YouTube: {}", e);
+            HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": format!("Failed to search YouTube: {}", e)
+            }))
+        }
+    }
 }
 
 #[get("/api/jobs/{job_id}")]
@@ -115,7 +163,9 @@ async fn main() -> std::io::Result<()> {
                 .app_data(web::Data::new(db_pool.clone()))
                 .app_data(web::Data::new(s3_client.clone()))
                 .app_data(web::Data::new(job_queue.clone()))
+                .app_data(web::Data::new(Arc::new(scraper::YoutubeScraper::new(db_pool.clone(), s3_client.clone()))))
                 .service(scrape_video)
+                .service(search_videos)
                 .service(get_job_status)
                 .service(scrape_status)
         })
