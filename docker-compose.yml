@@ -5,6 +5,8 @@ services:
     build: ./frontend
     ports:
       - "3000:80"
+    volumes:
+      - node_modules:/usr/src/app/node_modules
     networks:
       - app-network
 
@@ -26,7 +28,10 @@ services:
       - MINIO_ACCESS_KEY=minio
       - MINIO_SECRET_KEY=minio123
       - MINIO_BUCKET=videos
-    volumes: []
+    volumes:
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - backend-target:/usr/src/app/target
     networks:
       - app-network
 
@@ -48,6 +53,9 @@ services:
     volumes:
       - youtube-scraper-data:/tmp/videos
       - ./urls_to_scrape:/usr/src/app/urls_to_scrape
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - youtube-scraper-target:/usr/src/app/target
     networks:
       - app-network
 
@@ -87,3 +95,8 @@ volumes:
   db-data:
   minio-data:
   youtube-scraper-data:
+  cargo-registry:
+  cargo-git:
+  backend-target:
+  youtube-scraper-target:
+  node_modules:
