@@ -16,4 +16,5 @@ pub struct AppState {
     pub db_pool: PgPool,
     pub s3_client: Client,
     pub video_clients: StdMutex<HashMap<i32, Vec<tokio::sync::mpsc::Sender<String>>>>,
+    pub watchparty_clients: StdMutex<HashMap<i32, Vec<tokio::sync::mpsc::Sender<String>>>>,
 }

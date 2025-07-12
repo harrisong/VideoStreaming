@@ -10,6 +10,25 @@ const VideoPlayer: React.FC = () => {
   const [videoUrl, setVideoUrl] = useState<string>('');
   const [isWatchParty, setIsWatchParty] = useState(false);
   const [ws, setWs] = useState<WebSocket | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  
+  // Extract user ID from JWT token
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        // JWT tokens are in the format: header.payload.signature
+        const payload = token.split('.')[1];
+        // Decode the base64 payload
+        const decodedPayload = JSON.parse(atob(payload));
+        if (decodedPayload.user_id) {
+          setCurrentUserId(decodedPayload.user_id);
+        }
+      } catch (error) {
+        console.error('Error extracting user ID from token:', error);
+      }
+    }
+  }, []);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -70,23 +89,64 @@ const VideoPlayer: React.FC = () => {
       joinWatchParty();
 
       // Setup WebSocket for watch party synchronization
+      const token = localStorage.getItem('token');
+      // Include the token in the URL as a query parameter
       const websocket = new WebSocket(`ws://localhost:8080/api/ws/watchparty/${id}`);
+      
       websocket.onopen = () => {
         console.log('Watch Party WebSocket connected');
+        // Send the token as the first message for authentication
+        if (token) {
+          websocket.send(JSON.stringify({
+            type: 'auth',
+            token: token
+          }));
+        }
       };
       websocket.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        if (message.type_field === 'watchPartyControl') {
-          const videoElement = videoRef.current;
-          if (videoElement) {
-            if (message.action === 'play') {
-              videoElement.play();
-            } else if (message.action === 'pause') {
-              videoElement.pause();
-            } else if (message.action === 'seek' && message.time !== undefined) {
-              videoElement.currentTime = message.time;
+        console.log('Received WebSocket message:', event.data);
+        try {
+          const message = JSON.parse(event.data);
+          console.log('Parsed message:', message);
+          
+          if (message.type_field === 'watchPartyControl') {
+            console.log('Received watchPartyControl message:', message);
+            
+            // Check if this message is from the current user
+            if (message.source_id && currentUserId) {
+              // Parse the user_id from the source_id (format: "user_{user_id}_time_{timestamp}")
+              const sourceIdParts = message.source_id.split('_');
+              if (sourceIdParts.length >= 2) {
+                const sourceUserId = parseInt(sourceIdParts[1]);
+                
+                // If the message is from the current user, drop it to avoid infinite loops
+                if (sourceUserId === currentUserId) {
+                  console.log('Dropping message from current user to avoid infinite loops');
+                  return;
+                }
+              }
             }
+            
+            const videoElement = videoRef.current;
+            if (videoElement) {
+              if (message.action === 'play') {
+                console.log('Playing video at time:', videoElement.currentTime);
+                videoElement.play();
+              } else if (message.action === 'pause') {
+                console.log('Pausing video at time:', videoElement.currentTime);
+                videoElement.pause();
+              } else if (message.action === 'seek' && message.time !== undefined) {
+                console.log('Seeking video to time:', message.time);
+                videoElement.currentTime = message.time;
+              }
+            } else {
+              console.error('Video element not found');
+            }
+          } else {
+            console.log('Ignoring non-control message:', message);
           }
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error);
         }
       };
       websocket.onerror = (error) => {
@@ -114,28 +174,34 @@ const VideoPlayer: React.FC = () => {
 
     const handlePlay = () => {
       if (isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
+        const message = {
           action: 'play',
           time: videoElement.currentTime
-        }));
+        };
+        console.log('Sending play message:', message);
+        ws.send(JSON.stringify(message));
       }
     };
 
     const handlePause = () => {
       if (isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
+        const message = {
           action: 'pause',
           time: videoElement.currentTime
-        }));
+        };
+        console.log('Sending pause message:', message);
+        ws.send(JSON.stringify(message));
       }
     };
 
     const handleSeeked = () => {
       if (isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
+        const message = {
           action: 'seek',
           time: videoElement.currentTime
-        }));
+        };
+        console.log('Sending seek message:', message);
+        ws.send(JSON.stringify(message));
       }
     };
 
@@ -150,7 +216,7 @@ const VideoPlayer: React.FC = () => {
       videoElement.removeEventListener('pause', handlePause);
       videoElement.removeEventListener('seeked', handleSeeked);
     };
-  }, [isWatchParty, ws, id]);
+  }, [isWatchParty, ws, id, currentUserId]);
 
   return (
     <div className="bg-gray-100 min-h-screen">

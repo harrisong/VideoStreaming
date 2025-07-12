@@ -3,6 +3,7 @@ use dotenv::dotenv;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use std::collections::HashMap;
+use std::sync::Mutex as StdMutex;
 use bytes::Bytes;
 use futures::StreamExt;
 
@@ -30,6 +31,7 @@ async fn setup_test_app() -> (
         db_pool,
         s3_client,
         video_clients: std::sync::Mutex::new(HashMap::new()),
+        watchparty_clients: std::sync::Mutex::new(HashMap::new()),
     }));
     
     let app_state_clone = app_state.clone();

@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 use serde_json::json;
 use uuid::Uuid;
 use std::collections::HashMap;
+use std::sync::Mutex as StdMutex;
 
 // Import the necessary modules from the main application
 use video_streaming_backend::models::{RegisterRequest, LoginRequest, CommentRequest};
@@ -28,6 +29,7 @@ async fn setup_test_app() -> impl actix_web::dev::Service<
         db_pool,
         s3_client,
         video_clients: std::sync::Mutex::new(HashMap::new()),
+        watchparty_clients: std::sync::Mutex::new(HashMap::new()),
     }));
     
     // Create the test app
@@ -159,9 +161,12 @@ async fn test_video_listing() {
     if let Some(video) = video_with_tags {
         let tag = video["tags"][0].as_str().unwrap();
         
+        // URL encode the tag to handle special characters
+        let encoded_tag = urlencoding::encode(tag);
+        
         // Test listing videos by this tag
         let tag_req = test::TestRequest::get()
-            .uri(&format!("/api/videos/tag/{}", tag))
+            .uri(&format!("/api/videos/tag/{}", encoded_tag))
             .to_request();
         
         let tag_resp = test::call_service(&app, tag_req).await;

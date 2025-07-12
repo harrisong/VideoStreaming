@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 use serde_json::json;
 use uuid::Uuid;
 use std::collections::HashMap;
+use std::sync::Mutex as StdMutex;
 
 // Import the necessary modules from the main application
 use video_streaming_backend::models::{RegisterRequest, LoginRequest, CommentRequest};
@@ -28,6 +29,7 @@ async fn setup_test_app() -> impl actix_web::dev::Service<
         db_pool,
         s3_client,
         video_clients: std::sync::Mutex::new(HashMap::new()),
+        watchparty_clients: std::sync::Mutex::new(HashMap::new()),
     }));
     
     // Create the test app

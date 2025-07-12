@@ -8,19 +8,13 @@ use std::sync::Arc;
 use log::info;
 use env_logger;
 
+// Import from the crate root
+use video_streaming_backend::AppState;
+
 mod models;
 mod handlers;
 mod websocket;
 mod services;
-
-use sqlx::PgPool;
-use aws_sdk_s3::Client;
-
-pub struct AppState {
-    db_pool: PgPool,
-    s3_client: Client,
-    video_clients: StdMutex<HashMap<i32, Vec<tokio::sync::mpsc::Sender<String>>>>,
-}
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -28,10 +22,11 @@ async fn main() -> std::io::Result<()> {
     env_logger::init();
     let db_pool = services::init_db_pool().await;
     let s3_client = services::init_s3_client().await;
-    let app_state = Arc::new(Mutex::new(AppState { 
-        db_pool, 
-        s3_client, 
-        video_clients: StdMutex::new(HashMap::new()) 
+    let app_state = Arc::new(Mutex::new(AppState {
+        db_pool,
+        s3_client,
+        video_clients: std::sync::Mutex::new(HashMap::new()),
+        watchparty_clients: std::sync::Mutex::new(HashMap::new()),
     }));
 
     let app_state_clone = app_state.clone();
