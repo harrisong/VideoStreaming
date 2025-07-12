@@ -3183,6 +3183,7 @@ dependencies = [
  "aws-sdk-s3",
  "aws-types",
  "bcrypt",
+ "bytes 1.10.1",
  "chrono",
  "dotenv",
  "env_logger",
