@@ -2,20 +2,22 @@ use actix_web::{web, get, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use actix::ActorContext;
 use tokio::sync::mpsc;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 use log::info;
 
 use crate::models::Comment;
 use crate::AppState;
 
-pub async fn broadcast_comment(video_id: i32, comment: &Comment, state: &Arc<Mutex<AppState>>) {
-    let state = state.lock().await;
-    let clients = state.video_clients.lock().unwrap();
-    if let Some(client_list) = clients.get(&video_id) {
-        let comment_json = serde_json::to_string(comment).unwrap_or_else(|_| String::from("Error serializing comment"));
+pub fn broadcast_comment(video_id: i32, comment: Comment, clients: HashMap<i32, Vec<tokio::sync::mpsc::Sender<String>>>) {
+    if let Some(client_list) = clients.get(&video_id).cloned() {
         for tx in client_list {
-            let _ = tx.send(comment_json.clone()).await;
+            let comment_json = serde_json::to_string(&comment).unwrap_or_else(|_| String::from("Error serializing comment"));
+            // Clone the comment_json for each task
+            let msg = comment_json.clone();
+            tokio::spawn(async move {
+                let _ = tx.send(msg).await;
+            });
         }
     }
 }

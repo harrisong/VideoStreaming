@@ -265,7 +265,6 @@ async fn post_comment(
     state: web::Data<Arc<Mutex<AppState>>>,
     http_req: actix_web::HttpRequest,
 ) -> actix_web::HttpResponse {
-    let state_ref = state.clone();
     let state = state.lock().await;
     let video_id = path.into_inner();
 
@@ -309,8 +308,15 @@ async fn post_comment(
 
     match result {
         Ok(comment) => {
-            // Broadcast the new comment to all connected clients for this video
-            broadcast_comment(video_id, &comment, &state_ref).await;
+            // Clone necessary data for the background task
+            let comment_clone = comment.clone();
+            
+            // Get the video_clients_clone directly from the state we already have locked
+            let video_clients_clone = state.video_clients.lock().unwrap().clone();
+            
+            broadcast_comment(video_id, comment_clone, video_clients_clone);
+            
+            // Return the response immediately without waiting for broadcast
             actix_web::HttpResponse::Ok().json(comment)
         }
         Err(e) => {

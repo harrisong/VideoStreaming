@@ -37,7 +37,7 @@ pub struct Video {
     pub view_count: Option<i32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct Comment {
     pub id: i32,
     pub video_id: i32,
