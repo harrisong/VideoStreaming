@@ -47,7 +47,7 @@ async fn setup_test_app() -> (
 #[actix_web::test]
 async fn test_video_streaming_complete() {
     // Setup the test app
-    let (app, _app_state) = setup_test_app().await;
+    let (app, app_state) = setup_test_app().await;
     
     // First, get a list of videos to find one to stream
     let list_req = test::TestRequest::get()
@@ -68,6 +68,37 @@ async fn test_video_streaming_complete() {
     let s3_key = videos[0]["s3_key"].as_str().unwrap();
     
     println!("Testing complete streaming of video ID: {}, S3 key: {}", video_id, s3_key);
+    
+    // Create a dummy video file and upload it to S3
+    let dummy_video_data: &[u8] = &[
+        // WebM file header (minimal valid WebM file)
+        0x1A, 0x45, 0xDF, 0xA3, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1F, 0x42, 0x86, 0x81, 0x01,
+        0x42, 0xF7, 0x81, 0x01, 0x42, 0xF2, 0x81, 0x04, 0x42, 0xF3, 0x81, 0x08, 0x42, 0x82, 0x84, 0x77,
+        0x65, 0x62, 0x6D, 0x42, 0x87, 0x81, 0x02, 0x42, 0x85, 0x81, 0x02
+    ];
+    
+    // Upload the dummy video to S3
+    let bucket_name = std::env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
+    
+    let state = app_state.lock().await;
+    let put_result = state.s3_client.put_object()
+        .bucket(&bucket_name)
+        .key(s3_key)
+        .body(dummy_video_data.to_vec().into())
+        .content_type("video/webm")
+        .send()
+        .await;
+    
+    match put_result {
+        Ok(_) => println!("Successfully uploaded dummy video to S3"),
+        Err(e) => {
+            println!("Failed to upload dummy video to S3: {:?}", e);
+            assert!(false, "Failed to upload dummy video to S3");
+        }
+    }
+    
+    // Release the state lock
+    drop(state);
     
     // Now try to stream the video
     let stream_req = test::TestRequest::get()
