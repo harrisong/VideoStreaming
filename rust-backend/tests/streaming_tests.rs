@@ -11,11 +11,14 @@ use video_streaming_backend::handlers;
 use video_streaming_backend::AppState;
 use video_streaming_backend::services;
 
-async fn setup_test_app() -> impl actix_web::dev::Service<
-    actix_http::Request,
-    Response = actix_web::dev::ServiceResponse,
-    Error = actix_web::Error,
-> {
+async fn setup_test_app() -> (
+    impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    Arc<Mutex<AppState>>
+) {
     dotenv().ok();
     
     // Initialize the database pool and S3 client
@@ -29,18 +32,22 @@ async fn setup_test_app() -> impl actix_web::dev::Service<
         video_clients: std::sync::Mutex::new(HashMap::new()),
     }));
     
+    let app_state_clone = app_state.clone();
+    
     // Create the test app
-    test::init_service(
+    let app = test::init_service(
         App::new()
             .app_data(web::Data::new(app_state))
             .configure(handlers::configure_routes)
-    ).await
+    ).await;
+    
+    (app, app_state_clone)
 }
 
 #[actix_web::test]
 async fn test_video_streaming_complete() {
     // Setup the test app
-    let app = setup_test_app().await;
+    let (app, _app_state) = setup_test_app().await;
     
     // First, get a list of videos to find one to stream
     let list_req = test::TestRequest::get()
@@ -135,7 +142,69 @@ async fn test_video_streaming_complete() {
 #[actix_web::test]
 async fn test_thumbnail_streaming() {
     // Setup the test app
-    let app = setup_test_app().await;
+    let (app, app_state) = setup_test_app().await;
+    
+    // Create a simple test thumbnail
+    // This is a minimal valid JPEG image (1x1 pixel)
+    let test_thumbnail_data: &[u8] = &[
+        0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x00, 0x48,
+        0x00, 0x48, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01, 0x00,
+        0x01, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xC4, 0x00, 0x14, 0x10,
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00, 0x7F, 0x00, 0xFF, 0xD9
+    ];
+    
+    // Upload the test thumbnail to S3
+    let test_thumbnail_key = "thumbnails/test_thumbnail.jpg";
+    let bucket_name = std::env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
+    
+    let state = app_state.lock().await;
+    let put_result = state.s3_client.put_object()
+        .bucket(&bucket_name)
+        .key(test_thumbnail_key)
+        .body(test_thumbnail_data.to_vec().into())
+        .content_type("image/jpeg")
+        .send()
+        .await;
+    
+    match put_result {
+        Ok(_) => println!("Successfully uploaded test thumbnail to S3"),
+        Err(e) => {
+            println!("Failed to upload test thumbnail to S3: {:?}", e);
+            assert!(false, "Failed to upload test thumbnail to S3");
+        }
+    }
+    
+    // Create a test video with the thumbnail URL
+    let video_id = 9999; // Use a high ID that's unlikely to conflict
+    let thumbnail_url = "test_thumbnail.jpg";
+    
+    let insert_result = sqlx::query(
+        "INSERT INTO videos (id, title, s3_key, thumbnail_url) VALUES ($1, $2, $3, $4) 
+         ON CONFLICT (id) DO UPDATE SET thumbnail_url = $4"
+    )
+    .bind(video_id)
+    .bind("Test Video")
+    .bind("test_video.mp4")
+    .bind(thumbnail_url)
+    .execute(&state.db_pool)
+    .await;
+    
+    match insert_result {
+        Ok(_) => println!("Successfully created test video with thumbnail"),
+        Err(e) => {
+            println!("Failed to create test video: {:?}", e);
+            assert!(false, "Failed to create test video");
+        }
+    }
+    
+    // Release the state lock
+    drop(state);
     
     // First, get a list of videos to find one with a thumbnail
     let list_req = test::TestRequest::get()
@@ -148,16 +217,21 @@ async fn test_thumbnail_streaming() {
     let list_body = test::read_body(list_resp).await;
     let videos: Vec<serde_json::Value> = serde_json::from_slice(&list_body).unwrap();
     
-    // Find a video with a thumbnail
-    let video_with_thumbnail = videos.iter().find(|v| v.get("thumbnail_url").is_some() && !v["thumbnail_url"].is_null());
+    // Use our test video with the known thumbnail
+    let video_with_thumbnail = videos.iter().find(|v| v["id"].as_i64() == Some(9999));
     
     if let Some(video) = video_with_thumbnail {
         let thumbnail_url = video["thumbnail_url"].as_str().unwrap();
         
+        println!("Original thumbnail URL: {}", thumbnail_url);
+        
         // Extract the thumbnail key from the URL
         let thumbnail_key = if thumbnail_url.contains("/") {
-            thumbnail_url.split("/").last().unwrap()
+            let key = thumbnail_url.split("/").last().unwrap();
+            println!("Extracted key from URL with '/': {}", key);
+            key
         } else {
+            println!("Using URL directly as key: {}", thumbnail_url);
             thumbnail_url
         };
         
@@ -196,7 +270,7 @@ async fn test_thumbnail_streaming() {
 #[actix_web::test]
 async fn test_video_not_found() {
     // Setup the test app
-    let app = setup_test_app().await;
+    let (app, _app_state) = setup_test_app().await;
     
     // Try to stream a non-existent video
     let non_existent_id = 999999; // Assuming this ID doesn't exist
