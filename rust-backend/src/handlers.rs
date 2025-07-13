@@ -210,6 +210,40 @@ async fn get_videos_by_tag(
     }
 }
 
+#[get("/api/videos/search/{query}")]
+async fn search_videos(
+    path: web::Path<String>,
+    state: web::Data<Arc<Mutex<AppState>>>,
+) -> actix_web::HttpResponse {
+    let state = state.lock().await;
+    let query = path.into_inner();
+    let search_pattern = format!("%{}%", query.to_lowercase());
+    
+    let result = sqlx::query_as::<_, Video>(
+        "SELECT * FROM videos 
+         WHERE LOWER(title) LIKE $1 
+            OR LOWER(description) LIKE $1 
+            OR EXISTS (
+                SELECT 1 FROM unnest(tags) AS tag 
+                WHERE LOWER(tag) LIKE $1
+            )
+         ORDER BY upload_date DESC"
+    )
+    .bind(&search_pattern)
+    .fetch_all(&state.db_pool)
+    .await;
+
+    match result {
+        Ok(videos) => actix_web::HttpResponse::Ok().json(videos),
+        Err(e) => {
+            error!("Error searching videos: {:?}", e);
+            actix_web::HttpResponse::InternalServerError().json(json!({
+                "error": "Internal server error"
+            }))
+        }
+    }
+}
+
 #[get("/api/videos/{id}/stream")]
 async fn stream_video(
     path: web::Path<i32>,
@@ -459,6 +493,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
        .service(get_videos)
        .service(get_video)
        .service(get_videos_by_tag)
+       .service(search_videos)
        .service(stream_video)
        .service(post_comment)
        .service(get_comments)

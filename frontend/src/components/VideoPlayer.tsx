@@ -162,7 +162,7 @@ const VideoPlayer: React.FC = () => {
         websocket.close();
       };
     }
-  }, [isWatchParty, id]);
+  }, [isWatchParty, id, currentUserId]);
 
   useEffect(() => {
     const videoElement = videoRef.current;

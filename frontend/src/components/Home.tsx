@@ -4,6 +4,8 @@ import Navbar from './Navbar';
 
 const Home: React.FC = () => {
   const [videos, setVideos] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -21,10 +23,61 @@ const Home: React.FC = () => {
     fetchVideos();
   }, []);
 
+  const handleSearch = async (query: string) => {
+    setIsSearching(true);
+    setSearchQuery(query);
+    try {
+      const response = await fetch(`http://localhost:5050/api/videos/search/${encodeURIComponent(query)}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      setVideos(data);
+    } catch (error) {
+      console.error('Error searching videos:', error);
+    }
+  };
+
+  const handleClearSearch = async () => {
+    setIsSearching(false);
+    setSearchQuery('');
+    try {
+      const response = await fetch('http://localhost:5050/api/videos', {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      setVideos(data);
+    } catch (error) {
+      console.error('Error fetching videos:', error);
+    }
+  };
+
   return (
     <div className="bg-gray-100 min-h-screen">
-      <Navbar />
+      <Navbar onSearch={handleSearch} />
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {/* Search Results Header */}
+        {isSearching && (
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-gray-900">
+              Search results for "{searchQuery}" ({videos.length} videos found)
+            </h2>
+            <button
+              onClick={handleClearSearch}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              Clear Search
+            </button>
+          </div>
+        )}
+        
+        {/* No Results Message */}
+        {isSearching && videos.length === 0 && (
+          <div className="text-center py-12">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No videos found</h3>
+            <p className="text-gray-500">Try searching with different keywords</p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {videos.map((video) => (
             <div key={video.id} className="bg-white rounded-lg shadow-md overflow-hidden">
