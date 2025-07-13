@@ -28,6 +28,7 @@ async fn setup_test_app() -> impl actix_web::dev::Service<
     let app_state = Arc::new(Mutex::new(AppState {
         db_pool,
         s3_client,
+        redis_client: None,
         video_clients: std::sync::Mutex::new(HashMap::new()),
         watchparty_clients: std::sync::Mutex::new(HashMap::new()),
     }));

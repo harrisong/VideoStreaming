@@ -1,11 +1,10 @@
 use actix_web::{web, App, HttpServer, http};
 use actix_cors::Cors;
 use dotenv::dotenv;
-use std::sync::Mutex as StdMutex;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 use std::sync::Arc;
-use log::info;
+use log::{info, error};
 use env_logger;
 
 // Import from the crate root
@@ -15,6 +14,7 @@ mod models;
 mod handlers;
 mod websocket;
 mod services;
+mod redis_service;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -22,9 +22,26 @@ async fn main() -> std::io::Result<()> {
     env_logger::init();
     let db_pool = services::init_db_pool().await;
     let s3_client = services::init_s3_client().await;
+    
+    // Ensure the videos bucket exists
+    services::ensure_bucket_exists(&s3_client).await;
+    
+    // Initialize Redis client
+    let redis_client = match video_streaming_backend::redis_service::init_redis_client() {
+        Ok(client) => {
+            info!("Successfully connected to Redis");
+            Some(client)
+        },
+        Err(e) => {
+            error!("Failed to connect to Redis: {:?}", e);
+            None
+        }
+    };
+    
     let app_state = Arc::new(Mutex::new(AppState {
         db_pool,
         s3_client,
+        redis_client,
         video_clients: std::sync::Mutex::new(HashMap::new()),
         watchparty_clients: std::sync::Mutex::new(HashMap::new()),
     }));

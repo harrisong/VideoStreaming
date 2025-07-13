@@ -42,3 +42,22 @@ pub async fn init_s3_client() -> Client {
     let s3_config = s3_config_builder.build();
     Client::from_conf(s3_config)
 }
+
+pub async fn ensure_bucket_exists(client: &Client) {
+    let bucket_name = std::env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
+    
+    // Try to create the bucket directly
+    // If it already exists, the operation will fail but we'll ignore the error
+    match client.create_bucket().bucket(&bucket_name).send().await {
+        Ok(_) => log::info!("Bucket created successfully: {}", bucket_name),
+        Err(err) => {
+            // Check if the error is because the bucket already exists
+            if err.to_string().contains("BucketAlreadyExists") || err.to_string().contains("BucketAlreadyOwnedByYou") {
+                log::info!("Bucket already exists: {}", bucket_name);
+            } else {
+                // Log other errors but don't fail
+                log::warn!("Error creating bucket {}: {:?}", bucket_name, err);
+            }
+        }
+    }
+}

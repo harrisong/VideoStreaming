@@ -30,6 +30,7 @@ async fn setup_test_app() -> (
     let app_state = Arc::new(Mutex::new(AppState {
         db_pool,
         s3_client,
+        redis_client: None, // No Redis client in tests
         video_clients: std::sync::Mutex::new(HashMap::new()),
         watchparty_clients: std::sync::Mutex::new(HashMap::new()),
     }));

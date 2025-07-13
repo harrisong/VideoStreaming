@@ -28,6 +28,7 @@ actix = "0.13.5"
 uuid = { version = "1.3.3", features = ["v4"] }
 bytes = "1.10.1"
 urlencoding = "2.1.3"
+redis = { version = "0.23.0", features = ["tokio-comp"] }
 
 [dev-dependencies]
 actix-rt = "2.8.0"

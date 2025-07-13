@@ -5,9 +5,10 @@ use actix::AsyncContext;
 use tokio::sync::mpsc;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
-use log::info;
+use log::{info, error, warn};
 
 use crate::models::Comment;
+use crate::redis_service::{WatchPartyMessage, get_video_channel, publish_message, subscribe_to_channel};
 use crate::AppState;
 
 pub fn broadcast_comment(video_id: i32, comment: Comment, clients: HashMap<i32, Vec<tokio::sync::mpsc::Sender<String>>>) {
@@ -191,6 +192,48 @@ impl actix::Actor for WatchPartyWebSocket {
                 addr_clone.do_send(WsMessage(msg));
             }
         });
+        
+        // Subscribe to Redis channel for this video_id if Redis is available
+        let state_for_redis = self.state.clone();
+        let video_id_for_redis = self.video_id;
+        let addr_for_redis = addr.clone();
+        
+        tokio::spawn(async move {
+            let state_guard = state_for_redis.lock().await;
+            
+            // Check if Redis client is available
+            if let Some(redis_client) = &state_guard.redis_client {
+                // Create a channel name for this video
+                let channel_name = get_video_channel(video_id_for_redis);
+                
+                info!("Subscribing to Redis channel: {}", channel_name);
+                
+                // Clone the channel name for use in the closure
+                let channel_name_for_closure = channel_name.clone();
+                
+                // Clone the channel name again for use in the match statement
+                let channel_name_for_match = channel_name.clone();
+                
+                // Subscribe to the channel
+                match subscribe_to_channel(redis_client, channel_name, move |message| {
+                    // Convert the Redis message to a WebSocket message
+                    let msg_json = serde_json::to_string(&message).unwrap_or_else(|e| {
+                        error!("Failed to serialize Redis message: {:?}", e);
+                        "{}".to_string()
+                    });
+                    
+                    info!("Received message from Redis channel {}: {}", channel_name_for_closure, msg_json);
+                    
+                    // Send the message to the WebSocket client
+                    addr_for_redis.do_send(WsMessage(msg_json));
+                }).await {
+                    Ok(_) => info!("Successfully subscribed to Redis channel: {}", channel_name_for_match),
+                    Err(e) => error!("Failed to subscribe to Redis channel {}: {:?}", channel_name_for_match, e),
+                }
+            } else {
+                warn!("Redis client not available, skipping Redis subscription for video_id: {}", video_id_for_redis);
+            }
+        });
     }
 
     fn stopped(&mut self, ctx: &mut Self::Context) {
@@ -285,35 +328,57 @@ impl actix::StreamHandler<Result<ws::Message, ws::ProtocolError>> for WatchParty
                     let sender_tx = self.tx.clone();
                     tokio::spawn(async move {
                         // Get the client list and clone it to avoid holding the mutex across await points
-                        let client_list = {
+                        let (client_list, redis_client) = {
                             let state_guard = state.lock().await;
                             let clients = state_guard.watchparty_clients.lock().unwrap();
-                            clients.get(&video_id).cloned()
+                            (clients.get(&video_id).cloned(), state_guard.redis_client.clone())
                         };
 
-                        // Now send messages if we have clients
-                        if let Some(client_list) = client_list {
-                            info!("Found {} clients for video_id={}", client_list.len(), video_id);
-                            
-                            // For each client in the watchparty_clients HashMap for this video_id
-                            for (i, tx) in client_list.iter().enumerate() {
-                                // Skip sending the message back to the sender to avoid infinite loops
-                                if tx.same_channel(&sender_tx) {
-                                    info!("Skipping sender (client {}) for video_id={}", i, video_id);
-                                    continue;
-                                }
-                                
-                                // Send the message to the client's channel
-                                // This will be received by the task in the actor's started method
-                                // which will then forward it to the WebSocket connection
-                                let result = tx.send(msg_json.clone()).await;
-                                match result {
-                                    Ok(_) => info!("Successfully sent message to client {} for video_id={}", i, video_id),
-                                    Err(e) => info!("Failed to send message to client {} for video_id={}: {:?}", i, video_id, e),
-                                }
+                        // Create a Redis message
+                        let redis_message = WatchPartyMessage {
+                            type_field: "watchPartyControl".to_string(),
+                            video_id,
+                            user_id,
+                            action: control_msg_with_user.action.clone(),
+                            time: control_msg_with_user.time,
+                            source_id: source_id.clone(),
+                        };
+
+                        // Publish to Redis if available
+                        if let Some(redis_client) = redis_client {
+                            let publish_channel = get_video_channel(video_id);
+                            match publish_message(&redis_client, &publish_channel, &redis_message).await {
+                                Ok(_) => info!("Successfully published message to Redis channel: {}", publish_channel),
+                                Err(e) => error!("Failed to publish message to Redis channel {}: {:?}", publish_channel, e),
                             }
                         } else {
-                            info!("No clients found for video_id={}", video_id);
+                            warn!("Redis client not available, skipping Redis publish for video_id: {}", video_id);
+                            
+                            // If Redis is not available, fall back to local broadcasting
+                            // Now send messages if we have clients
+                            if let Some(client_list) = client_list {
+                                info!("Found {} clients for video_id={}", client_list.len(), video_id);
+                                
+                                // For each client in the watchparty_clients HashMap for this video_id
+                                for (i, tx) in client_list.iter().enumerate() {
+                                    // Skip sending the message back to the sender to avoid infinite loops
+                                    if tx.same_channel(&sender_tx) {
+                                        info!("Skipping sender (client {}) for video_id={}", i, video_id);
+                                        continue;
+                                    }
+                                    
+                                    // Send the message to the client's channel
+                                    // This will be received by the task in the actor's started method
+                                    // which will then forward it to the WebSocket connection
+                                    let result = tx.send(msg_json.clone()).await;
+                                    match result {
+                                        Ok(_) => info!("Successfully sent message to client {} for video_id={}", i, video_id),
+                                        Err(e) => info!("Failed to send message to client {} for video_id={}: {:?}", i, video_id, e),
+                                    }
+                                }
+                            } else {
+                                info!("No clients found for video_id={}", video_id);
+                            }
                         }
                     });
                 } else {

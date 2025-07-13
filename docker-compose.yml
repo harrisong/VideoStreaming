@@ -21,6 +21,7 @@ services:
     depends_on:
       - db
       - minio
+      - redis
     environment:
       - DATABASE_URL=postgres://postgres:postgres@db:5432/video_streaming_db
       - JWT_SECRET=secure_jwt_secret_key_12345
@@ -28,6 +29,7 @@ services:
       - MINIO_ACCESS_KEY=minio
       - MINIO_SECRET_KEY=minio123
       - MINIO_BUCKET=videos
+      - REDIS_URL=redis://redis:6379
     volumes:
       - cargo-registry:/usr/local/cargo/registry
       - cargo-git:/usr/local/cargo/git
@@ -87,6 +89,16 @@ services:
     networks:
       - app-network
 
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge
@@ -94,6 +106,7 @@ networks:
 volumes:
   db-data:
   minio-data:
+  redis-data:
   youtube-scraper-data:
   cargo-registry:
   cargo-git:
