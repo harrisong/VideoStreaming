@@ -1,0 +1,288 @@
+#cloud-config
+# Cloud-init configuration for Video Streaming Service
+
+# Update packages
+package_update: true
+package_upgrade: true
+
+# Install required packages
+packages:
+  - curl
+  - wget
+  - git
+  - htop
+  - ufw
+  - fail2ban
+  - unzip
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - apt-transport-https
+  - software-properties-common
+
+# Create non-root user
+users:
+  - name: deploy
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+# Configure firewall
+runcmd:
+  # Configure UFW firewall
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow ssh
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw --force enable
+  
+  # Configure fail2ban
+  - systemctl enable fail2ban
+  - systemctl start fail2ban
+  
+  # Install Docker
+  - curl -fsSL https://get.docker.com -o get-docker.sh
+  - sh get-docker.sh
+  - usermod -aG docker deploy
+  - rm get-docker.sh
+  
+  # Install Docker Compose
+  - curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+  - chmod +x /usr/local/bin/docker-compose
+  
+  # Configure Docker logging
+  - mkdir -p /etc/docker
+  - echo '{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}' > /etc/docker/daemon.json
+  - systemctl restart docker
+  
+  # Create application directory
+  - mkdir -p /opt/video-streaming
+  - chown deploy:deploy /opt/video-streaming
+  
+  # Mount additional storage if available
+  - |
+    if [ -b /dev/sdb ]; then
+      mkfs.ext4 /dev/sdb
+      mkdir -p /mnt/storage
+      mount /dev/sdb /mnt/storage
+      echo '/dev/sdb /mnt/storage ext4 defaults 0 2' >> /etc/fstab
+      chown deploy:deploy /mnt/storage
+    fi
+  
+  # Set up log rotation for Docker
+  - |
+    cat > /etc/logrotate.d/docker-containers << 'EOF'
+    /var/lib/docker/containers/*/*.log {
+        rotate 7
+        daily
+        compress
+        size=1M
+        missingok
+        delaycompress
+        copytruncate
+    }
+    EOF
+  
+  # Create backup directory
+  - mkdir -p /backup
+  - chown deploy:deploy /backup
+  
+  # Install monitoring tools
+  - apt-get install -y htop iotop nethogs
+  
+  # Configure system limits
+  - |
+    cat >> /etc/security/limits.conf << 'EOF'
+    * soft nofile 65536
+    * hard nofile 65536
+    * soft nproc 32768
+    * hard nproc 32768
+    EOF
+  
+  # Configure sysctl for better performance
+  - |
+    cat >> /etc/sysctl.conf << 'EOF'
+    # Network performance tuning
+    net.core.rmem_max = 16777216
+    net.core.wmem_max = 16777216
+    net.ipv4.tcp_rmem = 4096 87380 16777216
+    net.ipv4.tcp_wmem = 4096 65536 16777216
+    net.core.netdev_max_backlog = 5000
+    net.ipv4.tcp_congestion_control = bbr
+    
+    # File system performance
+    vm.swappiness = 10
+    vm.dirty_ratio = 15
+    vm.dirty_background_ratio = 5
+    
+    # Security
+    net.ipv4.conf.all.rp_filter = 1
+    net.ipv4.conf.default.rp_filter = 1
+    net.ipv4.icmp_echo_ignore_broadcasts = 1
+    net.ipv4.conf.all.accept_source_route = 0
+    net.ipv6.conf.all.accept_source_route = 0
+    net.ipv4.conf.all.log_martians = 1
+    EOF
+  
+  - sysctl -p
+  
+  # Create health check endpoint
+  - |
+    cat > /opt/health-check.sh << 'EOF'
+    #!/bin/bash
+    # Simple health check script
+    
+    # Check if Docker is running
+    if ! systemctl is-active --quiet docker; then
+        echo "Docker is not running"
+        exit 1
+    fi
+    
+    # Check if containers are running (when deployed)
+    if [ -f /opt/video-streaming/docker-compose.prod.yml ]; then
+        cd /opt/video-streaming
+        if ! docker-compose -f docker-compose.prod.yml ps | grep -q "Up"; then
+            echo "Application containers are not running"
+            exit 1
+        fi
+    fi
+    
+    echo "OK"
+    exit 0
+    EOF
+  
+  - chmod +x /opt/health-check.sh
+  
+  # Create simple HTTP health endpoint
+  - |
+    cat > /opt/simple-health-server.py << 'EOF'
+    #!/usr/bin/env python3
+    import http.server
+    import socketserver
+    import subprocess
+    import sys
+    
+    class HealthHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == '/health':
+                try:
+                    result = subprocess.run(['/opt/health-check.sh'], 
+                                          capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        self.send_response(200)
+                        self.send_header('Content-type', 'text/plain')
+                        self.end_headers()
+                        self.wfile.write(b'OK')
+                    else:
+                        self.send_response(503)
+                        self.send_header('Content-type', 'text/plain')
+                        self.end_headers()
+                        self.wfile.write(result.stdout.encode())
+                except Exception as e:
+                    self.send_response(500)
+                    self.send_header('Content-type', 'text/plain')
+                    self.end_headers()
+                    self.wfile.write(str(e).encode())
+            else:
+                self.send_response(404)
+                self.end_headers()
+    
+    if __name__ == "__main__":
+        PORT = 8000
+        with socketserver.TCPServer(("", PORT), HealthHandler) as httpd:
+            httpd.serve_forever()
+    EOF
+  
+  - chmod +x /opt/simple-health-server.py
+  
+  # Create systemd service for health check server
+  - |
+    cat > /etc/systemd/system/health-check.service << 'EOF'
+    [Unit]
+    Description=Simple Health Check Server
+    After=network.target
+    
+    [Service]
+    Type=simple
+    User=deploy
+    ExecStart=/usr/bin/python3 /opt/simple-health-server.py
+    Restart=always
+    RestartSec=5
+    
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+  
+  - systemctl daemon-reload
+  - systemctl enable health-check.service
+  - systemctl start health-check.service
+
+# Write files
+write_files:
+  - path: /opt/video-streaming/README.md
+    content: |
+      # Video Streaming Service Server
+      
+      This server was automatically configured for the Video Streaming Service.
+      
+      ## Server Information
+      - Environment: ${environment}
+      - Domain: ${domain_name}
+      - Configured: $(date)
+      
+      ## Next Steps
+      1. Clone your application repository to /opt/video-streaming/
+      2. Configure environment variables
+      3. Run the deployment script
+      
+      ## Useful Commands
+      - Check Docker status: `systemctl status docker`
+      - View system resources: `htop`
+      - Check firewall: `ufw status`
+      - Health check: `curl localhost:8000/health`
+    owner: deploy:deploy
+    permissions: '0644'
+
+  - path: /etc/fail2ban/jail.local
+    content: |
+      [DEFAULT]
+      bantime = 3600
+      findtime = 600
+      maxretry = 5
+      
+      [sshd]
+      enabled = true
+      port = ssh
+      filter = sshd
+      logpath = /var/log/auth.log
+      maxretry = 3
+    permissions: '0644'
+
+# Final message
+final_message: |
+  Video Streaming Service server initialization complete!
+  
+  Server is ready for application deployment.
+  
+  Key information:
+  - User 'deploy' created with sudo access
+  - Docker and Docker Compose installed
+  - Firewall configured (SSH, HTTP, HTTPS)
+  - Health check endpoint available at :8000/health
+  - Application directory: /opt/video-streaming/
+  
+  Next steps:
+  1. SSH to the server as 'deploy' user
+  2. Clone your application repository
+  3. Run the deployment script
+  
+  The server will reboot to apply all configurations.
+
+# Reboot after setup
+power_state:
+  mode: reboot
+  timeout: 30
+  condition: True
