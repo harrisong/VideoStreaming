@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from './Navbar';
+import { buildApiUrl, API_CONFIG } from '../config';
 
 interface Video {
   id: string;
@@ -19,7 +20,7 @@ const TagVideos = () => {
   useEffect(() => {
     const fetchVideosByTag = async () => {
       try {
-        const response = await fetch(`http://localhost:5050/api/videos/tag/${tag}`, {
+        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.VIDEO_BY_TAG, tag!), {
           credentials: 'include'
         });
         const data = await response.json();
@@ -40,7 +41,7 @@ const TagVideos = () => {
           {videos.map((video: Video) => (
             <div key={video.id} className="bg-white rounded-lg shadow-md overflow-hidden">
               <img 
-                src={video.thumbnail_url ? `http://localhost:5050/api/thumbnails/${video.thumbnail_url.split('/').pop()}` : ''} 
+                src={video.thumbnail_url ? buildApiUrl(API_CONFIG.ENDPOINTS.THUMBNAILS, video.thumbnail_url.split('/').pop() || '') : ''}
                 alt={video.title} 
                 className="w-full h-48 object-cover" 
               />

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { buildApiUrl, API_CONFIG } from '../config';
 
 const UserList: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
@@ -7,7 +8,7 @@ const UserList: React.FC = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await fetch('http://localhost:5050/api/auth/users', {
+        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.USERS), {
           credentials: 'include'
         });
         if (response.ok) {

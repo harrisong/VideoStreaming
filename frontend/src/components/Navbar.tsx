@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { buildApiUrl, API_CONFIG } from '../config';
 
 const Navbar: React.FC<{ onWatchPartyToggle?: () => void; isWatchParty?: boolean; onSearch?: (query: string) => void }> = ({ onWatchPartyToggle, isWatchParty, onSearch }) => {
   const navigate = useNavigate();
@@ -102,7 +103,7 @@ const Navbar: React.FC<{ onWatchPartyToggle?: () => void; isWatchParty?: boolean
                     <button
                       onClick={async () => {
                         try {
-                          await fetch('http://localhost:5050/api/auth/logout', {
+                          await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.LOGOUT), {
                             method: 'POST',
                             credentials: 'include'
                           });

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import EmojiPicker from 'emoji-picker-react';
+import { buildApiUrl, buildWebSocketUrl, API_CONFIG } from '../config';
 
 interface Comment {
   id: number;
@@ -24,7 +25,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({ videoId, currentTime })
     // Fetch comments from backend
     const fetchComments = async () => {
       try {
-        const response = await fetch(`http://localhost:5050/api/comments/${videoId}`, {
+        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.COMMENTS, videoId.toString()), {
           credentials: 'include'
         });
         if (response.ok) {
@@ -42,7 +43,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({ videoId, currentTime })
     fetchComments();
 
     // Setup WebSocket for real-time comments
-    const websocket = new WebSocket(`ws://localhost:8080/api/ws/comments/${videoId}`);
+    const websocket = new WebSocket(buildWebSocketUrl(API_CONFIG.ENDPOINTS.WS_COMMENTS, videoId.toString()));
     websocket.onopen = () => {
       console.log('WebSocket connected');
     };
@@ -91,7 +92,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({ videoId, currentTime })
           return;
         }
 
-        const response = await fetch(`http://localhost:5050/api/comments/${videoId}`, {
+        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.COMMENTS, videoId.toString()), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

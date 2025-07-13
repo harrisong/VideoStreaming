@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from './Navbar';
+import { buildApiUrl, API_CONFIG } from '../config';
 
 const Home: React.FC = () => {
   const [videos, setVideos] = useState<any[]>([]);
@@ -11,7 +12,7 @@ const Home: React.FC = () => {
   useEffect(() => {
     const fetchVideos = async () => {
       try {
-        const response = await fetch('http://localhost:5050/api/videos', {
+        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.VIDEOS), {
           credentials: 'include'
         });
         const data = await response.json();
@@ -27,7 +28,7 @@ const Home: React.FC = () => {
     setIsSearching(true);
     setSearchQuery(query);
     try {
-      const response = await fetch(`http://localhost:5050/api/videos/search/${encodeURIComponent(query)}`, {
+      const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.VIDEO_SEARCH, encodeURIComponent(query)), {
         credentials: 'include'
       });
       const data = await response.json();
@@ -41,7 +42,7 @@ const Home: React.FC = () => {
     setIsSearching(false);
     setSearchQuery('');
     try {
-      const response = await fetch('http://localhost:5050/api/videos', {
+      const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.VIDEOS), {
         credentials: 'include'
       });
       const data = await response.json();
@@ -82,7 +83,7 @@ const Home: React.FC = () => {
           {videos.map((video) => (
             <div key={video.id} className="bg-white rounded-lg shadow-md overflow-hidden">
               <img 
-                src={video.thumbnail_url ? `http://localhost:5050/api/thumbnails/${video.thumbnail_url.split('/').pop()}` : ''} 
+                src={video.thumbnail_url ? buildApiUrl(API_CONFIG.ENDPOINTS.THUMBNAILS, video.thumbnail_url.split('/').pop()) : ''}
                 alt={video.title} 
                 className="w-full h-48 object-cover" 
               />

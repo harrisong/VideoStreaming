@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import CommentSection from './CommentSection';
 import Navbar from './Navbar';
+import { buildApiUrl, buildWebSocketUrl, API_CONFIG } from '../config';
 
 const VideoPlayer: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -36,13 +37,13 @@ const VideoPlayer: React.FC = () => {
   useEffect(() => {
     const fetchVideo = async () => {
       try {
-        const response = await fetch(`http://localhost:5050/api/videos/${id}`, {
+        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.VIDEO_BY_ID, id!), {
           credentials: 'include'
         });
         const data = await response.json();
         setVideo(data);
         
-        setVideoUrl(`http://localhost:5050/api/videos/${id}/stream`);
+        setVideoUrl(buildApiUrl(API_CONFIG.ENDPOINTS.VIDEO_STREAM, id!, 'stream'));
       } catch (error) {
         console.error('Error fetching video:', error);
       }
@@ -68,7 +69,7 @@ const VideoPlayer: React.FC = () => {
           alert('Failed to join watch party. Please ensure you are logged in.');
           return;
         }
-        const response = await fetch(`http://localhost:5050/api/watchparty/${id}/join`, {
+        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.WATCHPARTY_JOIN, id!, 'join'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -91,7 +92,7 @@ const VideoPlayer: React.FC = () => {
       // Setup WebSocket for watch party synchronization
       const token = localStorage.getItem('token');
       // Include the token in the URL as a query parameter
-      const websocket = new WebSocket(`ws://localhost:8080/api/ws/watchparty/${id}`);
+      const websocket = new WebSocket(buildWebSocketUrl(API_CONFIG.ENDPOINTS.WS_WATCHPARTY, id!));
       
       websocket.onopen = () => {
         console.log('Watch Party WebSocket connected');
