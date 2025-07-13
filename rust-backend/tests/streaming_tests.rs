@@ -26,6 +26,9 @@ async fn setup_test_app() -> (
     let db_pool = services::init_db_pool().await;
     let s3_client = services::init_s3_client().await;
     
+    // Ensure the videos bucket exists (this is missing in tests but present in main.rs)
+    services::ensure_bucket_exists(&s3_client).await;
+    
     // Create the app state
     let app_state = Arc::new(Mutex::new(AppState {
         db_pool,
