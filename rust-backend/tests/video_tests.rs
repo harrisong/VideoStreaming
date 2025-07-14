@@ -2,13 +2,11 @@ use actix_web::{test, web, App, http};
 use dotenv::dotenv;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use serde_json::json;
 use uuid::Uuid;
 use std::collections::HashMap;
-use std::sync::Mutex as StdMutex;
 
 // Import the necessary modules from the main application
-use video_streaming_backend::models::{RegisterRequest, LoginRequest, CommentRequest};
+use video_streaming_backend::models::{RegisterRequest, CommentRequest};
 use video_streaming_backend::handlers;
 use video_streaming_backend::AppState;
 use video_streaming_backend::services;

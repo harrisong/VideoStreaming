@@ -3,8 +3,6 @@ use dotenv::dotenv;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use std::collections::HashMap;
-use std::sync::Mutex as StdMutex;
-use bytes::Bytes;
 use futures::StreamExt;
 
 // Import the necessary modules from the main application

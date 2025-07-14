@@ -2,10 +2,8 @@ use actix_web::{test, web, App};
 use dotenv::dotenv;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use serde_json::json;
 use uuid::Uuid;
 use std::collections::HashMap;
-use std::sync::Mutex as StdMutex;
 
 // Import the necessary modules from the main application
 use video_streaming_backend::models::{RegisterRequest, LoginRequest};
@@ -192,7 +190,7 @@ async fn test_duplicate_registration() {
         .set_json(&register_request)
         .to_request();
     
-    let mut duplicate_register_resp = test::call_service(&app, duplicate_register_req).await;
+    let duplicate_register_resp = test::call_service(&app, duplicate_register_req).await;
     
     // Check the status code first and store it
     let status = duplicate_register_resp.status();

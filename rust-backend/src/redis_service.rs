@@ -31,7 +31,7 @@ pub async fn publish_message(client: &Client, channel: &str, message: &WatchPart
     });
     
     info!("Publishing message to channel {}: {}", channel, message_json);
-    con.publish(channel, message_json).await?;
+    con.publish::<_, _, ()>(channel, message_json).await?;
     Ok(())
 }
 

@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS videos (
   id SERIAL PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
   description TEXT,
-  s3_key VARCHAR(255) NOT NULL,
+  s3_key VARCHAR(255) UNIQUE NOT NULL,
   thumbnail_url VARCHAR(255),
   uploaded_by INTEGER REFERENCES users(id),
   upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -48,14 +48,10 @@ CREATE INDEX IF NOT EXISTS jobs_status_idx ON jobs (status);
 -- Insert sample data for testing
 -- Insert a sample user (password is hashed for 'password123')
 INSERT INTO users (username, email, password) 
-SELECT 'testuser', 'test@example.com', '$2b$10$X7VYFDe.9uoyfW7Mbdzc/.8U9tR5FTfAZrB6iZ9eMW8o7G7o9eP7W'
-WHERE NOT EXISTS (
-    SELECT 1 FROM users WHERE username = 'testuser' OR email = 'test@example.com'
-);
+VALUES ('testuser', 'test@example.com', '$2b$10$X7VYFDe.9uoyfW7Mbdzc/.8U9tR5FTfAZrB6iZ9eMW8o7G7o9eP7W')
+ON CONFLICT (username) DO NOTHING;
 
--- Insert a sample video
+-- Insert a sample video (note: we need a unique constraint on s3_key for this to work properly)
 INSERT INTO videos (title, description, s3_key, thumbnail_url, uploaded_by, tags)
-SELECT 'Sample Video 4', 'This is a sample video for testing purposes.', 'videos/sample_video_4.webm', 'https://via.placeholder.com/150', 1, ARRAY['_some-tag']
-WHERE NOT EXISTS (
-    SELECT 1 FROM videos WHERE s3_key = 'videos/sample_video_4.webm'
-);
+VALUES ('Sample Video 4', 'This is a sample video for testing purposes.', 'videos/sample_video_4.webm', 'https://via.placeholder.com/150', 1, ARRAY['_some-tag'])
+ON CONFLICT (s3_key) DO NOTHING;
