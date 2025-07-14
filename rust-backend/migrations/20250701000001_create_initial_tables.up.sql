@@ -1,5 +1,5 @@
 -- Create users table
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   username VARCHAR(255) UNIQUE NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
@@ -8,7 +8,7 @@ CREATE TABLE users (
 );
 
 -- Create videos table
-CREATE TABLE videos (
+CREATE TABLE IF NOT EXISTS videos (
   id SERIAL PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
   description TEXT,
@@ -21,7 +21,7 @@ CREATE TABLE videos (
 );
 
 -- Create comments table
-CREATE TABLE comments (
+CREATE TABLE IF NOT EXISTS comments (
   id SERIAL PRIMARY KEY,
   video_id INTEGER REFERENCES videos(id) ON DELETE CASCADE,
   user_id INTEGER REFERENCES users(id),
@@ -30,7 +30,7 @@ CREATE TABLE comments (
 );
 
 -- Create jobs table
-CREATE TABLE jobs (
+CREATE TABLE IF NOT EXISTS jobs (
     id SERIAL PRIMARY KEY,
     job_id TEXT UNIQUE NOT NULL,
     request JSONB NOT NULL,
@@ -42,16 +42,20 @@ CREATE TABLE jobs (
 );
 
 -- Create indexes
-CREATE INDEX jobs_job_id_idx ON jobs (job_id);
-CREATE INDEX jobs_status_idx ON jobs (status);
+CREATE INDEX IF NOT EXISTS jobs_job_id_idx ON jobs (job_id);
+CREATE INDEX IF NOT EXISTS jobs_status_idx ON jobs (status);
 
 -- Insert sample data for testing
 -- Insert a sample user (password is hashed for 'password123')
 INSERT INTO users (username, email, password) 
-VALUES ('testuser', 'test@example.com', '$2b$10$X7VYFDe.9uoyfW7Mbdzc/.8U9tR5FTfAZrB6iZ9eMW8o7G7o9eP7W')
-ON CONFLICT DO NOTHING;
+SELECT 'testuser', 'test@example.com', '$2b$10$X7VYFDe.9uoyfW7Mbdzc/.8U9tR5FTfAZrB6iZ9eMW8o7G7o9eP7W'
+WHERE NOT EXISTS (
+    SELECT 1 FROM users WHERE username = 'testuser' OR email = 'test@example.com'
+);
 
 -- Insert a sample video
 INSERT INTO videos (title, description, s3_key, thumbnail_url, uploaded_by, tags)
-VALUES ('Sample Video 4', 'This is a sample video for testing purposes.', 'videos/sample_video_4.webm', 'https://via.placeholder.com/150', 1, ARRAY['_some-tag'])
-ON CONFLICT DO NOTHING;
+SELECT 'Sample Video 4', 'This is a sample video for testing purposes.', 'videos/sample_video_4.webm', 'https://via.placeholder.com/150', 1, ARRAY['_some-tag']
+WHERE NOT EXISTS (
+    SELECT 1 FROM videos WHERE s3_key = 'videos/sample_video_4.webm'
+);

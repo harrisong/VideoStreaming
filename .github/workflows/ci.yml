@@ -46,12 +46,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Initialize database with schema
-      - name: Initialize database
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
-          PGPASSWORD=postgres psql -h localhost -U postgres -d video_streaming_db -f init-db.sql
+      # Note: Database initialization is now handled by SQLx migrations
+      # The init-db.sql file is only used for Docker development environment
 
       # Setup Node.js for frontend
       - name: Setup Node.js
