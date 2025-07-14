@@ -1,14 +1,51 @@
-FROM rust:1.88
+# Build stage
+FROM rust:1.88 AS builder
 
 # Install dependencies
-RUN apt-get update && apt-get install -y libpq-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libpq-dev && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /usr/src/video_streaming_backend
-COPY . .
-RUN cargo update
+WORKDIR /app
+
+# Copy dependency files first for better layer caching
+COPY Cargo.toml ./
+
+# Create a dummy main.rs to build dependencies (without Cargo.lock for compatibility)
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+
+# Build dependencies (this layer will be cached unless Cargo.toml changes)
+RUN cargo build --release && rm -rf src target/release/deps/video_streaming_backend*
+
+# Copy source code (excluding target via .dockerignore)
+COPY src ./src
+COPY migrations ./migrations
+COPY sqlx-data.json ./
+
+# Build the actual application
 RUN cargo build --release
-RUN cp target/release/video_streaming_backend /usr/local/bin/video_streaming_backend
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy binary from builder stage
+COPY --from=builder /app/target/release/video_streaming_backend /app/video_streaming_backend
+
+# Copy migrations
+COPY --from=builder /app/migrations ./migrations
+
+# Set environment
 ENV RUST_LOG=info
+
+# Expose port
 EXPOSE 5050
-EXPOSE 8080
-CMD ["video_streaming_backend"]
+
+# Run the application
+CMD ["./video_streaming_backend"]

@@ -1,28 +1,36 @@
-# Use Node.js as the base image
-FROM node:18-alpine
+# Build stage
+FROM node:18-alpine as builder
 
 # Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json
+# Copy package.json and package-lock.json for better layer caching
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm ci --only=production --silent
 
-# Copy the rest of the application code
-COPY . .
+# Copy source code (excluding node_modules via .dockerignore)
+COPY src ./src
+COPY public ./public
+COPY tsconfig.json ./
+COPY tailwind.config.js ./
+COPY postcss.config.js ./
 
 # Build the React app
 RUN npm run build
 
-# Serve the app using a lightweight web server
+# Production stage
 FROM nginx:alpine
-COPY --from=0 /app/build /usr/share/nginx/html
+
+# Copy built app from builder stage
+COPY --from=builder /app/build /usr/share/nginx/html
+
+# Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Expose port 80
-EXPOSE 80
+# Expose port 3000
+EXPOSE 3000
 
 # Start Nginx
 CMD ["nginx", "-g", "daemon off;"]

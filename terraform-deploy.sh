@@ -133,6 +133,11 @@ check_provider_credentials() {
     local provider=${1:-$(grep '^cloud_provider' terraform/terraform.tfvars | cut -d'"' -f2)}
     
     case $provider in
+        aws)
+            if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+                error "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are required for AWS"
+            fi
+            ;;
         hetzner)
             if [ -z "$HCLOUD_TOKEN" ]; then
                 error "HCLOUD_TOKEN environment variable is required for Hetzner Cloud"
