@@ -50,11 +50,18 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting HTTP server on 0.0.0.0:5050");
     let http_server = HttpServer::new(move || {
-        let cors = Cors::default()
-            .allowed_origin("http://localhost:3000")
+        let allowed_origins = std::env::var("CORS_ALLOWED_ORIGINS")
+            .unwrap_or_else(|_| "http://localhost:3000".to_string());
+        
+        let mut cors = Cors::default()
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
             .allowed_headers(vec![http::header::CONTENT_TYPE, http::header::AUTHORIZATION])
             .supports_credentials();
+
+        // Add each origin from the comma-separated list
+        for origin in allowed_origins.split(',') {
+            cors = cors.allowed_origin(origin.trim());
+        }
 
         App::new()
             .wrap(cors)
@@ -66,11 +73,18 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting WebSocket server on 0.0.0.0:8080");
     let ws_server = HttpServer::new(move || {
-        let cors = Cors::default()
-            .allowed_origin("http://localhost:3000")
+        let allowed_origins = std::env::var("CORS_ALLOWED_ORIGINS")
+            .unwrap_or_else(|_| "http://localhost:3000".to_string());
+        
+        let mut cors = Cors::default()
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
             .allowed_headers(vec![http::header::CONTENT_TYPE, http::header::AUTHORIZATION])
             .supports_credentials();
+
+        // Add each origin from the comma-separated list
+        for origin in allowed_origins.split(',') {
+            cors = cors.allowed_origin(origin.trim());
+        }
 
         App::new()
             .wrap(cors)

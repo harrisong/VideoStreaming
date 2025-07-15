@@ -885,6 +885,10 @@ resource "aws_ecs_task_definition" "app" {
         {
           name  = "AWS_REGION"
           value = var.region
+        },
+        {
+          name  = "CORS_ALLOWED_ORIGINS"
+          value = "https://${var.domain_name},http://${var.domain_name}"
         }
       ]
 
