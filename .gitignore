@@ -32,3 +32,6 @@ minio-data
 **/target/
 **/build/
 **/dist/
+
+# Build cache for optimized deployment script
+.build-cache/
