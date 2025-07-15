@@ -254,6 +254,13 @@ resource "aws_security_group" "ecs" {
   }
 
   ingress {
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  ingress {
     from_port       = 3000
     to_port         = 3000
     protocol        = "tcp"
@@ -633,6 +640,28 @@ resource "aws_lb_target_group" "backend" {
   vpc_id      = aws_vpc.main.id
   target_type = "ip"
 
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher             = "200"
+    path                = "/api/status"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 2
+  }
+
+  tags = var.common_tags
+}
+
+resource "aws_lb_target_group" "websocket" {
+  name        = "${var.environment}-video-streaming-ws-tg"
+  port        = 8080
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "ip"
+
   # Enable WebSocket support
   protocol_version = "HTTP1"
   
@@ -647,12 +676,12 @@ resource "aws_lb_target_group" "backend" {
     enabled             = true
     healthy_threshold   = 2
     interval            = 30
-    matcher             = "200"
-    path                = "/api/status"
+    matcher             = "200,400,426"  # 426 is WebSocket upgrade required
+    path                = "/api/ws/comments/1"
     port                = "traffic-port"
     protocol            = "HTTP"
-    timeout             = 5
-    unhealthy_threshold = 2
+    timeout             = 10
+    unhealthy_threshold = 3
   }
 
   tags = var.common_tags
@@ -732,7 +761,7 @@ resource "aws_lb_listener_rule" "websocket" {
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
+    target_group_arn = aws_lb_target_group.websocket.arn
   }
 
   condition {
@@ -866,6 +895,10 @@ resource "aws_ecs_task_definition" "app" {
         {
           containerPort = 5050
           protocol      = "tcp"
+        },
+        {
+          containerPort = 8080
+          protocol      = "tcp"
         }
       ]
 
@@ -955,6 +988,12 @@ resource "aws_ecs_service" "main" {
     target_group_arn = aws_lb_target_group.backend.arn
     container_name   = "backend"
     container_port   = 5050
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.websocket.arn
+    container_name   = "backend"
+    container_port   = 8080
   }
 
   load_balancer {
