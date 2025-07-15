@@ -40,7 +40,7 @@ COPY --from=builder /app/target/release/video_streaming_backend /app/video_strea
 
 # Copy migrations and init script
 COPY --from=builder /app/migrations ./migrations
-COPY ../init-db.sql ./init-db.sql
+COPY init-db.sql ./init-db.sql
 
 # Set environment
 ENV RUST_LOG=info

@@ -92,7 +92,7 @@ services:
       - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
     volumes:
       - db-data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./rust-backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     deploy:
       resources:
         limits:

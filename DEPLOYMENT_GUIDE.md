@@ -189,7 +189,7 @@ services:
       - POSTGRES_DB=video_streaming_db
     volumes:
       - db-data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./rust-backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     deploy:
       resources:
         limits:
