@@ -517,6 +517,28 @@ resource "aws_cloudfront_distribution" "main" {
     max_ttl     = 86400
   }
 
+  # WebSocket paths should bypass CloudFront and go directly to ALB
+  ordered_cache_behavior {
+    path_pattern     = "/api/ws/*"
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "ALB-${var.environment}-video-streaming"
+
+    forwarded_values {
+      query_string = true
+      headers      = ["*"]  # Forward all headers for WebSocket upgrade
+      cookies {
+        forward = "all"
+      }
+    }
+
+    min_ttl                = 0
+    default_ttl            = 0    # No caching for WebSocket connections
+    max_ttl                = 0
+    compress               = false # Don't compress WebSocket traffic
+    viewer_protocol_policy = "redirect-to-https"
+  }
+
   ordered_cache_behavior {
     path_pattern     = "/static/*"
     allowed_methods  = ["GET", "HEAD", "OPTIONS"]
@@ -611,6 +633,16 @@ resource "aws_lb_target_group" "backend" {
   vpc_id      = aws_vpc.main.id
   target_type = "ip"
 
+  # Enable WebSocket support
+  protocol_version = "HTTP1"
+  
+  # Configure stickiness for WebSocket connections
+  stickiness {
+    enabled = true
+    type    = "lb_cookie"
+    cookie_duration = 86400  # 24 hours
+  }
+
   health_check {
     enabled             = true
     healthy_threshold   = 2
@@ -689,6 +721,30 @@ resource "aws_lb_listener_rule" "api" {
   condition {
     path_pattern {
       values = ["/api/*"]
+    }
+  }
+}
+
+# WebSocket-specific listener rule (higher priority to catch WebSocket upgrades)
+resource "aws_lb_listener_rule" "websocket" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 50
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/ws/*"]
+    }
+  }
+
+  condition {
+    http_header {
+      http_header_name = "Connection"
+      values          = ["*Upgrade*"]
     }
   }
 }
