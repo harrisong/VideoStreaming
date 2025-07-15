@@ -40,7 +40,7 @@ async fn setup_test_app(pool: PgPool) -> impl actix_web::dev::Service<
 async fn test_search_videos_by_title(pool: PgPool) {
     // Insert test data
     sqlx::query(
-        "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)"
+        "INSERT INTO users (username, email, password) VALUES ($1, $2, $3) ON CONFLICT (username) DO NOTHING"
     )
     .bind("testuser")
     .bind("test@example.com")
@@ -50,7 +50,7 @@ async fn test_search_videos_by_title(pool: PgPool) {
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO videos (title, description, s3_key, uploaded_by) VALUES ($1, $2, $3, $4)"
+        "INSERT INTO videos (title, description, s3_key, uploaded_by) VALUES ($1, $2, $3, $4) ON CONFLICT (s3_key) DO NOTHING"
     )
     .bind("Test Video About Cats")
     .bind("A video about cats")
@@ -61,7 +61,7 @@ async fn test_search_videos_by_title(pool: PgPool) {
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO videos (title, description, s3_key, uploaded_by) VALUES ($1, $2, $3, $4)"
+        "INSERT INTO videos (title, description, s3_key, uploaded_by) VALUES ($1, $2, $3, $4) ON CONFLICT (s3_key) DO NOTHING"
     )
     .bind("Another Video")
     .bind("A video about dogs")
@@ -92,7 +92,7 @@ async fn test_search_videos_by_title(pool: PgPool) {
 async fn test_search_videos_by_description(pool: PgPool) {
     // Insert test data
     sqlx::query(
-        "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)"
+        "INSERT INTO users (username, email, password) VALUES ($1, $2, $3) ON CONFLICT (username) DO NOTHING"
     )
     .bind("testuser")
     .bind("test@example.com")
@@ -102,7 +102,7 @@ async fn test_search_videos_by_description(pool: PgPool) {
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO videos (title, description, s3_key, uploaded_by) VALUES ($1, $2, $3, $4)"
+        "INSERT INTO videos (title, description, s3_key, uploaded_by) VALUES ($1, $2, $3, $4) ON CONFLICT (s3_key) DO NOTHING"
     )
     .bind("Video One")
     .bind("This is about programming")
@@ -113,7 +113,7 @@ async fn test_search_videos_by_description(pool: PgPool) {
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO videos (title, description, s3_key, uploaded_by) VALUES ($1, $2, $3, $4)"
+        "INSERT INTO videos (title, description, s3_key, uploaded_by) VALUES ($1, $2, $3, $4) ON CONFLICT (s3_key) DO NOTHING"
     )
     .bind("Video Two")
     .bind("This is about cooking")
@@ -144,7 +144,7 @@ async fn test_search_videos_by_description(pool: PgPool) {
 async fn test_search_videos_by_tags(pool: PgPool) {
     // Insert test data
     sqlx::query(
-        "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)"
+        "INSERT INTO users (username, email, password) VALUES ($1, $2, $3) ON CONFLICT (username) DO NOTHING"
     )
     .bind("testuser")
     .bind("test@example.com")
@@ -154,7 +154,7 @@ async fn test_search_videos_by_tags(pool: PgPool) {
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO videos (title, description, s3_key, uploaded_by, tags) VALUES ($1, $2, $3, $4, $5)"
+        "INSERT INTO videos (title, description, s3_key, uploaded_by, tags) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (s3_key) DO NOTHING"
     )
     .bind("Tagged Video")
     .bind("A video with tags")
@@ -166,7 +166,7 @@ async fn test_search_videos_by_tags(pool: PgPool) {
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO videos (title, description, s3_key, uploaded_by, tags) VALUES ($1, $2, $3, $4, $5)"
+        "INSERT INTO videos (title, description, s3_key, uploaded_by, tags) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (s3_key) DO NOTHING"
     )
     .bind("Another Video")
     .bind("Another video")
@@ -198,7 +198,7 @@ async fn test_search_videos_by_tags(pool: PgPool) {
 async fn test_search_videos_case_insensitive(pool: PgPool) {
     // Insert test data
     sqlx::query(
-        "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)"
+        "INSERT INTO users (username, email, password) VALUES ($1, $2, $3) ON CONFLICT (username) DO NOTHING"
     )
     .bind("testuser")
     .bind("test@example.com")
@@ -208,7 +208,7 @@ async fn test_search_videos_case_insensitive(pool: PgPool) {
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO videos (title, description, s3_key, uploaded_by) VALUES ($1, $2, $3, $4)"
+        "INSERT INTO videos (title, description, s3_key, uploaded_by) VALUES ($1, $2, $3, $4) ON CONFLICT (s3_key) DO NOTHING"
     )
     .bind("UPPERCASE TITLE")
     .bind("lowercase description")
