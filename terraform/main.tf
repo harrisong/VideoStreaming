@@ -164,6 +164,26 @@ output "aws_resources" {
   value       = module.aws.server_info
 }
 
+output "ecr_repositories" {
+  description = "ECR repository URLs for Docker images"
+  value       = module.aws.ecr_repositories
+}
+
+output "scraper_api_url" {
+  description = "API Gateway URL for triggering scraper"
+  value       = module.aws.scraper_api_url
+}
+
+output "database_endpoint" {
+  description = "RDS database endpoint"
+  value       = module.aws.database_endpoint
+}
+
+output "s3_buckets" {
+  description = "S3 bucket names"
+  value       = module.aws.s3_buckets
+}
+
 output "deployment_info" {
   description = "Deployment information and next steps"
   value = {
@@ -173,11 +193,17 @@ output "deployment_info" {
     server_size  = var.server_size
     domain       = var.domain_name
     region       = local.region
+    scraper_api  = module.aws.scraper_api_url
+    ecr_repos    = module.aws.ecr_repositories
     next_steps = [
-      "1. Build and push Docker images to ECR",
+      "1. Build and push Docker images to ECR:",
+      "   - Backend: ${module.aws.ecr_repositories.backend}",
+      "   - Frontend: ${module.aws.ecr_repositories.frontend}",
+      "   - Scraper: ${module.aws.ecr_repositories.scraper}",
       "2. Update DNS records to point ${var.domain_name} to the ALB",
       "3. Access your application at https://${var.domain_name}",
-      "4. Monitor via CloudWatch logs and dashboards"
+      "4. Use scraper API at ${module.aws.scraper_api_url}",
+      "5. Monitor via CloudWatch logs and dashboards"
     ]
   }
 }

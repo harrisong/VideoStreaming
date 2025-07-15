@@ -1101,6 +1101,407 @@ resource "aws_ecr_repository" "frontend" {
   tags = var.common_tags
 }
 
+resource "aws_ecr_repository" "scraper" {
+  name                 = "${var.environment}-video-streaming-scraper"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = var.common_tags
+}
+
+# On-Demand YouTube Scraper Task Definition
+resource "aws_ecs_task_definition" "scraper" {
+  family                   = "${var.environment}-video-streaming-scraper"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 1024  # 1 vCPU
+  memory                   = 2048  # 2GB RAM (needed for video processing)
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn           = aws_iam_role.scraper_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name  = "scraper"
+      image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com/${var.environment}-video-streaming-scraper:latest"
+      
+      # Run in CLI mode for one-time execution
+      command = ["youtube_scraper", "--url", "PLACEHOLDER_URL", "--user-id", "1"]
+
+      environment = [
+        {
+          name  = "DATABASE_URL"
+          value = "postgres://postgres:${random_password.db_password.result}@${aws_db_instance.main.endpoint}/video_streaming_db"
+        },
+        {
+          name  = "AWS_REGION"
+          value = var.region
+        },
+        {
+          name  = "MINIO_BUCKET"
+          value = aws_s3_bucket.videos.bucket
+        },
+        {
+          name  = "RUST_LOG"
+          value = "info"
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.scraper.name
+          awslogs-region        = var.region
+          awslogs-stream-prefix = "scraper"
+        }
+      }
+
+      essential = true
+    }
+  ])
+
+  tags = var.common_tags
+}
+
+# CloudWatch Log Group for Scraper
+resource "aws_cloudwatch_log_group" "scraper" {
+  name              = "/ecs/${var.environment}-video-streaming-scraper"
+  retention_in_days = 7  # Keep logs for 7 days only to save costs
+
+  tags = var.common_tags
+}
+
+# IAM Role for Scraper Task (with S3 permissions)
+resource "aws_iam_role" "scraper_task" {
+  name = "${var.environment}-video-streaming-scraper-task"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = var.common_tags
+}
+
+resource "aws_iam_role_policy" "scraper_task" {
+  name = "${var.environment}-video-streaming-scraper-task-policy"
+  role = aws_iam_role.scraper_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.videos.arn,
+          "${aws_s3_bucket.videos.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+# Lambda function to trigger scraper tasks on-demand
+resource "aws_lambda_function" "scraper_trigger" {
+  filename         = "scraper_trigger.zip"
+  function_name    = "${var.environment}-video-streaming-scraper-trigger"
+  role            = aws_iam_role.lambda_scraper_trigger.arn
+  handler         = "index.handler"
+  runtime         = "python3.9"
+  timeout         = 60
+
+  environment {
+    variables = {
+      ECS_CLUSTER_NAME = aws_ecs_cluster.main.name
+      TASK_DEFINITION  = aws_ecs_task_definition.scraper.arn
+      SUBNET_IDS       = join(",", aws_subnet.private[*].id)
+      SECURITY_GROUP   = aws_security_group.ecs.id
+    }
+  }
+
+  depends_on = [data.archive_file.scraper_trigger_zip]
+
+  tags = var.common_tags
+}
+
+# Create the Lambda deployment package
+data "archive_file" "scraper_trigger_zip" {
+  type        = "zip"
+  output_path = "scraper_trigger.zip"
+  
+  source {
+    content = <<EOF
+import json
+import boto3
+import os
+import uuid
+
+ecs = boto3.client('ecs')
+
+def handler(event, context):
+    try:
+        # Parse the request body
+        if 'body' in event:
+            body = json.loads(event['body'])
+        else:
+            body = event
+        
+        youtube_url = body.get('youtube_url')
+        user_id = body.get('user_id', 1)
+        
+        if not youtube_url:
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'error': 'youtube_url is required'})
+            }
+        
+        # Generate a unique task name
+        task_name = f"scraper-{str(uuid.uuid4())[:8]}"
+        
+        # Override the container command with the actual URL
+        task_definition = os.environ['TASK_DEFINITION']
+        
+        # Run the ECS task
+        response = ecs.run_task(
+            cluster=os.environ['ECS_CLUSTER_NAME'],
+            taskDefinition=task_definition,
+            launchType='FARGATE',
+            networkConfiguration={
+                'awsvpcConfiguration': {
+                    'subnets': os.environ['SUBNET_IDS'].split(','),
+                    'securityGroups': [os.environ['SECURITY_GROUP']],
+                    'assignPublicIp': 'DISABLED'
+                }
+            },
+            overrides={
+                'containerOverrides': [
+                    {
+                        'name': 'scraper',
+                        'command': ['youtube_scraper', '--url', youtube_url, '--user-id', str(user_id)]
+                    }
+                ]
+            },
+            tags=[
+                {
+                    'key': 'Name',
+                    'value': task_name
+                },
+                {
+                    'key': 'Type',
+                    'value': 'OnDemandScraper'
+                }
+            ]
+        )
+        
+        task_arn = response['tasks'][0]['taskArn']
+        
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({
+                'message': 'Scraper task started successfully',
+                'task_arn': task_arn,
+                'task_name': task_name,
+                'youtube_url': youtube_url
+            })
+        }
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({'error': str(e)})
+        }
+EOF
+    filename = "index.py"
+  }
+}
+
+# IAM Role for Lambda
+resource "aws_iam_role" "lambda_scraper_trigger" {
+  name = "${var.environment}-video-streaming-lambda-scraper-trigger"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = var.common_tags
+}
+
+resource "aws_iam_role_policy" "lambda_scraper_trigger" {
+  name = "${var.environment}-video-streaming-lambda-scraper-trigger-policy"
+  role = aws_iam_role.lambda_scraper_trigger.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:RunTask",
+          "ecs:DescribeTasks",
+          "ecs:TagResource"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:PassRole"
+        ]
+        Resource = [
+          aws_iam_role.ecs_task_execution.arn,
+          aws_iam_role.scraper_task.arn
+        ]
+      }
+    ]
+  })
+}
+
+# API Gateway for triggering scraper
+resource "aws_api_gateway_rest_api" "scraper_api" {
+  name        = "${var.environment}-video-streaming-scraper-api"
+  description = "API for triggering on-demand video scraping"
+
+  tags = var.common_tags
+}
+
+resource "aws_api_gateway_resource" "scraper_resource" {
+  rest_api_id = aws_api_gateway_rest_api.scraper_api.id
+  parent_id   = aws_api_gateway_rest_api.scraper_api.root_resource_id
+  path_part   = "scrape"
+}
+
+resource "aws_api_gateway_method" "scraper_method" {
+  rest_api_id   = aws_api_gateway_rest_api.scraper_api.id
+  resource_id   = aws_api_gateway_resource.scraper_resource.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_method" "scraper_options" {
+  rest_api_id   = aws_api_gateway_rest_api.scraper_api.id
+  resource_id   = aws_api_gateway_resource.scraper_resource.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "scraper_integration" {
+  rest_api_id = aws_api_gateway_rest_api.scraper_api.id
+  resource_id = aws_api_gateway_resource.scraper_resource.id
+  http_method = aws_api_gateway_method.scraper_method.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.scraper_trigger.invoke_arn
+}
+
+resource "aws_api_gateway_integration" "scraper_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.scraper_api.id
+  resource_id = aws_api_gateway_resource.scraper_resource.id
+  http_method = aws_api_gateway_method.scraper_options.http_method
+
+  type = "MOCK"
+  
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "scraper_options_response" {
+  rest_api_id = aws_api_gateway_rest_api.scraper_api.id
+  resource_id = aws_api_gateway_resource.scraper_resource.id
+  http_method = aws_api_gateway_method.scraper_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "scraper_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.scraper_api.id
+  resource_id = aws_api_gateway_resource.scraper_resource.id
+  http_method = aws_api_gateway_method.scraper_options.http_method
+  status_code = aws_api_gateway_method_response.scraper_options_response.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+}
+
+resource "aws_api_gateway_deployment" "scraper_deployment" {
+  depends_on = [
+    aws_api_gateway_integration.scraper_integration,
+    aws_api_gateway_integration.scraper_options_integration
+  ]
+
+  rest_api_id = aws_api_gateway_rest_api.scraper_api.id
+  stage_name  = "prod"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_lambda_permission" "api_gateway_lambda" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.scraper_trigger.function_name
+  principal     = "apigateway.amazonaws.com"
+
+  source_arn = "${aws_api_gateway_rest_api.scraper_api.execution_arn}/*/*"
+}
+
 # Outputs
 output "server_ips" {
   description = "ECS service endpoint"
@@ -1173,7 +1574,18 @@ output "ecr_repositories" {
   value = {
     backend  = aws_ecr_repository.backend.repository_url
     frontend = aws_ecr_repository.frontend.repository_url
+    scraper  = aws_ecr_repository.scraper.repository_url
   }
+}
+
+output "scraper_api_endpoint" {
+  description = "API Gateway endpoint for triggering scraper"
+  value       = "${aws_api_gateway_rest_api.scraper_api.execution_arn}/prod/scrape"
+}
+
+output "scraper_api_url" {
+  description = "Full URL for scraper API"
+  value       = "https://${aws_api_gateway_rest_api.scraper_api.id}.execute-api.${var.region}.amazonaws.com/prod/scrape"
 }
 
 output "cloudfront_domain" {

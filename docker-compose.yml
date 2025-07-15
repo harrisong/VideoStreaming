@@ -3,6 +3,7 @@ version: '3.8'
 services:
   frontend:
     build: ./frontend
+    platform: linux/amd64
     ports:
       - "3000:80"
     volumes:
@@ -15,6 +16,7 @@ services:
       context: ./rust-backend
       args:
         - DATABASE_URL=postgres://postgres:postgres@db:5432/video_streaming_db
+    platform: linux/amd64
     ports:
       - "5050:5050"
       - "8080:8080"
@@ -49,6 +51,7 @@ services:
   youtube-scraper:
     build:
       context: ./youtube-scraper
+    platform: linux/amd64
     ports:
       - "5060:5060"
     depends_on:

@@ -86,17 +86,24 @@ scrape_urls() {
     echo "All URLs have been processed"
 }
 
-# Start the youtube-scraper in server mode in the background
-echo "Starting youtube-scraper in server mode..."
-youtube_scraper --server &
-SCRAPER_PID=$!
+# Check if arguments were passed to the container
+if [ $# -gt 0 ]; then
+    # If arguments are provided, execute them directly (bypass server mode)
+    echo "Executing command: $@"
+    exec "$@"
+else
+    # Default behavior: start in server mode and process URLs file
+    echo "Starting youtube-scraper in server mode..."
+    youtube_scraper --server &
+    SCRAPER_PID=$!
 
-# Check if we have a URLs file to process
-if [ -f "/usr/src/app/urls_to_scrape" ]; then
-    # Process the URLs
-    scrape_urls "/usr/src/app/urls_to_scrape"
+    # Check if we have a URLs file to process
+    if [ -f "/usr/src/app/urls_to_scrape" ]; then
+        # Process the URLs
+        scrape_urls "/usr/src/app/urls_to_scrape"
+    fi
+
+    # Keep the container running with the server
+    echo "Scraper server is running. Use Ctrl+C to stop."
+    wait $SCRAPER_PID
 fi
-
-# Keep the container running with the server
-echo "Scraper server is running. Use Ctrl+C to stop."
-wait $SCRAPER_PID
