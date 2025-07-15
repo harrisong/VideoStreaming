@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import Plyr from 'plyr-react';
 import CommentSection from './CommentSection';
 import Navbar from './Navbar';
 import { buildApiUrl, buildWebSocketUrl, API_CONFIG } from '../config';
@@ -31,7 +32,7 @@ const VideoPlayer: React.FC = () => {
     }
   }, []);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const plyrRef = useRef<any>(null);
   const [currentTime, setCurrentTime] = useState(0);
 
   useEffect(() => {
@@ -52,8 +53,16 @@ const VideoPlayer: React.FC = () => {
   }, [id]);
 
   useEffect(() => {
-    if (videoUrl && videoRef.current) {
-      videoRef.current.load(); // Reload the video element when the URL changes
+    if (videoUrl && plyrRef.current && plyrRef.current.plyr) {
+      plyrRef.current.plyr.source = {
+        type: 'video',
+        sources: [
+          {
+            src: videoUrl,
+            type: 'video/mp4',
+          }
+        ]
+      };
     }
   }, [videoUrl]);
 
@@ -128,20 +137,20 @@ const VideoPlayer: React.FC = () => {
               }
             }
             
-            const videoElement = videoRef.current;
-            if (videoElement) {
+            const player = plyrRef.current?.plyr;
+            if (player) {
               if (message.action === 'play') {
-                console.log('Playing video at time:', videoElement.currentTime);
-                videoElement.play();
+                console.log('Playing video at time:', player.currentTime);
+                player.play();
               } else if (message.action === 'pause') {
-                console.log('Pausing video at time:', videoElement.currentTime);
-                videoElement.pause();
+                console.log('Pausing video at time:', player.currentTime);
+                player.pause();
               } else if (message.action === 'seek' && message.time !== undefined) {
                 console.log('Seeking video to time:', message.time);
-                videoElement.currentTime = message.time;
+                player.currentTime = message.time;
               }
             } else {
-              console.error('Video element not found');
+              console.error('Plyr player not found');
             }
           } else {
             console.log('Ignoring non-control message:', message);
@@ -165,59 +174,49 @@ const VideoPlayer: React.FC = () => {
     }
   }, [isWatchParty, id, currentUserId]);
 
-  useEffect(() => {
-    const videoElement = videoRef.current;
-    if (!videoElement) return;
+  // Event handlers for Plyr
+  const handleTimeUpdate = () => {
+    const player = plyrRef.current?.plyr;
+    if (player) {
+      setCurrentTime(player.currentTime);
+    }
+  };
 
-    const updateTime = () => {
-      setCurrentTime(videoElement.currentTime);
-    };
+  const handlePlay = () => {
+    const player = plyrRef.current?.plyr;
+    if (player && isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
+      const message = {
+        action: 'play',
+        time: player.currentTime
+      };
+      console.log('Sending play message:', message);
+      ws.send(JSON.stringify(message));
+    }
+  };
 
-    const handlePlay = () => {
-      if (isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
-        const message = {
-          action: 'play',
-          time: videoElement.currentTime
-        };
-        console.log('Sending play message:', message);
-        ws.send(JSON.stringify(message));
-      }
-    };
+  const handlePause = () => {
+    const player = plyrRef.current?.plyr;
+    if (player && isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
+      const message = {
+        action: 'pause',
+        time: player.currentTime
+      };
+      console.log('Sending pause message:', message);
+      ws.send(JSON.stringify(message));
+    }
+  };
 
-    const handlePause = () => {
-      if (isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
-        const message = {
-          action: 'pause',
-          time: videoElement.currentTime
-        };
-        console.log('Sending pause message:', message);
-        ws.send(JSON.stringify(message));
-      }
-    };
-
-    const handleSeeked = () => {
-      if (isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
-        const message = {
-          action: 'seek',
-          time: videoElement.currentTime
-        };
-        console.log('Sending seek message:', message);
-        ws.send(JSON.stringify(message));
-      }
-    };
-
-    videoElement.addEventListener('timeupdate', updateTime);
-    videoElement.addEventListener('play', handlePlay);
-    videoElement.addEventListener('pause', handlePause);
-    videoElement.addEventListener('seeked', handleSeeked);
-
-    return () => {
-      videoElement.removeEventListener('timeupdate', updateTime);
-      videoElement.removeEventListener('play', handlePlay);
-      videoElement.removeEventListener('pause', handlePause);
-      videoElement.removeEventListener('seeked', handleSeeked);
-    };
-  }, [isWatchParty, ws, id, currentUserId]);
+  const handleSeeked = () => {
+    const player = plyrRef.current?.plyr;
+    if (player && isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
+      const message = {
+        action: 'seek',
+        time: player.currentTime
+      };
+      console.log('Sending seek message:', message);
+      ws.send(JSON.stringify(message));
+    }
+  };
 
   return (
     <div className="bg-gray-100 min-h-screen">
@@ -227,11 +226,40 @@ const VideoPlayer: React.FC = () => {
           <div className="flex-1">
             <div className="bg-white rounded-lg shadow-md overflow-hidden">
               <div className="aspect-w-16 aspect-h-9">
-                <video ref={videoRef} controls className="w-full h-full object-contain">
-                  <source src={videoUrl} type="video/webm" />
-                  <source src={videoUrl} type="video/mp4" />
-                  Your browser does not support the video tag.
-                </video>
+                <Plyr
+                  ref={plyrRef}
+                  source={{
+                    type: 'video',
+                    sources: [
+                      {
+                        src: videoUrl,
+                        type: 'video/mp4',
+                      }
+                    ]
+                  }}
+                  options={{
+                    controls: [
+                      'play-large',
+                      'play',
+                      'progress',
+                      'current-time',
+                      'duration',
+                      'mute',
+                      'volume',
+                      'settings',
+                      'fullscreen'
+                    ],
+                    settings: ['quality', 'speed'],
+                    quality: {
+                      default: 720,
+                      options: [1080, 720, 480, 360]
+                    }
+                  }}
+                  onTimeUpdate={handleTimeUpdate}
+                  onPlay={handlePlay}
+                  onPause={handlePause}
+                  onSeeked={handleSeeked}
+                />
               </div>
               <div className="p-4">
                 <h2 className="text-2xl font-bold text-gray-900">{video ? video.title : 'Loading...'}</h2>
