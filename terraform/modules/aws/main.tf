@@ -876,6 +876,74 @@ resource "aws_iam_role_policy" "ecs_task" {
   })
 }
 
+# Database Migration Task Definition
+resource "aws_ecs_task_definition" "db_migration" {
+  family                   = "${var.environment}-video-streaming-db-migration"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn           = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name  = "db-migration"
+      image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com/${var.environment}-video-streaming-backend:latest"
+      
+      command = [
+        "sh", "-c", 
+        "apt-get update && apt-get install -y postgresql-client && psql \"$DATABASE_URL\" -f /app/init-db.sql"
+      ]
+
+      environment = [
+        {
+          name  = "DATABASE_URL"
+          value = "postgres://postgres:${random_password.db_password.result}@${aws_db_instance.main.endpoint}/video_streaming_db?sslmode=require"
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.ecs.name
+          awslogs-region        = var.region
+          awslogs-stream-prefix = "db-migration"
+        }
+      }
+
+      essential = true
+    }
+  ])
+
+  tags = var.common_tags
+}
+
+# Run database migration as a one-time task
+resource "null_resource" "db_migration" {
+  depends_on = [
+    aws_db_instance.main,
+    aws_ecs_cluster.main,
+    aws_ecs_task_definition.db_migration
+  ]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      aws ecs run-task \
+        --cluster ${aws_ecs_cluster.main.name} \
+        --task-definition ${aws_ecs_task_definition.db_migration.arn} \
+        --launch-type FARGATE \
+        --network-configuration "awsvpcConfiguration={subnets=[${join(",", aws_subnet.private[*].id)}],securityGroups=[${aws_security_group.ecs.id}],assignPublicIp=DISABLED}" \
+        --region ${var.region}
+    EOT
+  }
+
+  triggers = {
+    db_endpoint = aws_db_instance.main.endpoint
+    task_def    = aws_ecs_task_definition.db_migration.revision
+  }
+}
+
 # ECS Task Definition
 resource "aws_ecs_task_definition" "app" {
   family                   = "${var.environment}-video-streaming"
