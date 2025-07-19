@@ -40,6 +40,7 @@ const Navbar: React.FC<{
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   const isMenuOpen = Boolean(anchorEl);
 
@@ -125,12 +126,17 @@ const Navbar: React.FC<{
               <Logo />
             </IconButton>
 
-            {/* Search Bar */}
+            {/* Desktop Search Bar */}
             {onSearch && (
               <Box
                 component="form"
                 onSubmit={handleSearch}
-                sx={{ flexGrow: 1, maxWidth: 600, mx: 3 }}
+                sx={{ 
+                  flexGrow: 1, 
+                  maxWidth: 600, 
+                  mx: 3,
+                  display: { xs: 'none', md: 'block' }
+                }}
               >
                 <TextField
                   fullWidth
@@ -174,6 +180,18 @@ const Navbar: React.FC<{
 
             {/* Action Buttons */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* Mobile Search Button */}
+            {onSearch && (
+              <IconButton
+                color="inherit"
+                onClick={() => setIsMobileSearchOpen(!isMobileSearchOpen)}
+                sx={{ display: { xs: 'flex', md: 'none' } }}
+                title="Search"
+              >
+                <SearchIcon />
+              </IconButton>
+            )}
+
             {/* Categories Button */}
             <Button
               color="inherit"
@@ -248,6 +266,64 @@ const Navbar: React.FC<{
           </Toolbar>
         </Container>
       </AppBar>
+
+      {/* Mobile Search Bar */}
+      {onSearch && isMobileSearchOpen && (
+        <Box
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            backgroundColor: 'primary.main',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+          }}
+        >
+          <Container maxWidth="xl">
+            <Box
+              component="form"
+              onSubmit={handleSearch}
+              sx={{ p: 2 }}
+            >
+              <TextField
+                fullWidth
+                size="small"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search videos..."
+                autoFocus
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton type="submit" edge="end">
+                        <SearchIcon />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                    '& fieldset': {
+                      borderColor: 'rgba(255, 255, 255, 0.3)',
+                    },
+                    '&:hover fieldset': {
+                      borderColor: 'rgba(255, 255, 255, 0.5)',
+                    },
+                    '&.Mui-focused fieldset': {
+                      borderColor: 'rgba(255, 255, 255, 0.8)',
+                    },
+                  },
+                  '& .MuiInputBase-input': {
+                    color: 'inherit',
+                    '&::placeholder': {
+                      color: 'rgba(255, 255, 255, 0.7)',
+                      opacity: 1,
+                    },
+                  },
+                }}
+              />
+            </Box>
+          </Container>
+        </Box>
+      )}
 
       {/* User Menu */}
       <Menu
