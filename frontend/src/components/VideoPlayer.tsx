@@ -359,7 +359,13 @@ const VideoPlayer: React.FC = () => {
 
   // Auto-play next video when current ends
   const handleVideoEnded = () => {
-    if (autoplay && playlist.length > 1) {
+    if (repeat) {
+      // Repeat current video
+      if (videoRef.current) {
+        videoRef.current.currentTime = 0;
+        videoRef.current.play();
+      }
+    } else if (autoplay && playlist.length > 1) {
       playNext();
     }
   };
