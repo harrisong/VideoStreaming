@@ -5,15 +5,21 @@ import {
   Box,
   Typography,
   Chip,
-  IconButton,
   Paper,
-  Tooltip,
+  IconButton,
+  Slider,
+  Stack,
 } from '@mui/material';
 import {
+  PlayArrow as PlayIcon,
+  Pause as PauseIcon,
+  VolumeUp as VolumeUpIcon,
+  VolumeOff as VolumeOffIcon,
   Fullscreen as FullscreenIcon,
   FullscreenExit as FullscreenExitIcon,
+  Settings as SettingsIcon,
+  AspectRatio as AspectRatioIcon,
 } from '@mui/icons-material';
-import Plyr from 'plyr-react';
 import CommentSection from './CommentSection';
 import Navbar from './Navbar';
 import { buildApiUrl, buildWebSocketUrl, API_CONFIG } from '../config';
@@ -28,14 +34,32 @@ const VideoPlayer: React.FC = () => {
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [isFullWidth, setIsFullWidth] = useState(false);
   
+  // Video player state
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+  
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
+  
+  // Preview state
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewTime, setPreviewTime] = useState(0);
+  const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
+
   // Extract user ID from JWT token
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
       try {
-        // JWT tokens are in the format: header.payload.signature
         const payload = token.split('.')[1];
-        // Decode the base64 payload
         const decodedPayload = JSON.parse(atob(payload));
         if (decodedPayload.user_id) {
           setCurrentUserId(decodedPayload.user_id);
@@ -46,62 +70,7 @@ const VideoPlayer: React.FC = () => {
     }
   }, []);
 
-  const plyrRef = useRef<any>(null);
-  const [currentTime, setCurrentTime] = useState(0);
-
-  // Custom Plyr setup with resize button
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (plyrRef.current?.plyr) {
-        const player = plyrRef.current.plyr;
-        const controls = player.elements?.controls;
-        
-        if (controls && !controls.querySelector('[data-plyr="resize"]')) {
-          // Create custom resize button
-          const resizeButton = document.createElement('button');
-          resizeButton.className = 'plyr__control';
-          resizeButton.type = 'button';
-          resizeButton.setAttribute('data-plyr', 'resize');
-          resizeButton.innerHTML = `
-            <svg width="22" height="22" viewBox="0 0 24 24" role="presentation" focusable="false" style="display: block; margin: auto;">
-              <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" fill="currentColor"/>
-            </svg>
-            <span class="plyr__tooltip" role="tooltip">${isFullWidth ? 'Fit to container' : 'Expand to full width'}</span>
-          `;
-          
-          // Add custom styling for better alignment
-          resizeButton.style.cssText = `
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 48px;
-            height: 48px;
-            padding: 0;
-          `;
-          
-          // Add pressed class based on current state
-          if (isFullWidth) {
-            resizeButton.classList.add('plyr__control--pressed');
-          }
-          
-          // Add click handler
-          resizeButton.addEventListener('click', () => {
-            setIsFullWidth(!isFullWidth);
-            resizeButton.classList.toggle('plyr__control--pressed');
-          });
-          
-          // Insert before fullscreen button
-          const fullscreenButton = controls.querySelector('[data-plyr="fullscreen"]');
-          if (fullscreenButton) {
-            controls.insertBefore(resizeButton, fullscreenButton);
-          }
-        }
-      }
-    }, 1000); // Wait for Plyr to be fully initialized
-
-    return () => clearTimeout(timer);
-  }, [videoUrl, isFullWidth]);
-
+  // Fetch video data
   useEffect(() => {
     const fetchVideo = async () => {
       try {
@@ -110,7 +79,6 @@ const VideoPlayer: React.FC = () => {
         });
         const data = await response.json();
         setVideo(data);
-        
         setVideoUrl(buildApiUrl(API_CONFIG.ENDPOINTS.VIDEO_STREAM, id!, 'stream'));
       } catch (error) {
         console.error('Error fetching video:', error);
@@ -119,60 +87,198 @@ const VideoPlayer: React.FC = () => {
     fetchVideo();
   }, [id]);
 
-  useEffect(() => {
-    if (videoUrl && plyrRef.current && plyrRef.current.plyr) {
-      plyrRef.current.plyr.source = {
-        type: 'video',
-        sources: [
-          {
-            src: videoUrl,
-            type: 'video/mp4',
-          }
-        ]
-      };
+  // Video event handlers
+  const handlePlay = () => {
+    if (videoRef.current) {
+      videoRef.current.play();
+      setIsPlaying(true);
+      
+      if (isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          action: 'play',
+          time: videoRef.current.currentTime
+        }));
+      }
     }
-  }, [videoUrl]);
+  };
 
+  const handlePause = () => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+      
+      if (isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          action: 'pause',
+          time: videoRef.current.currentTime
+        }));
+      }
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setCurrentTime(videoRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration);
+    }
+  };
+
+  const handleSeek = (newTime: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+      
+      if (isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          action: 'seek',
+          time: newTime
+        }));
+      }
+    }
+  };
+
+  const handleVolumeChange = (newVolume: number) => {
+    if (videoRef.current) {
+      videoRef.current.volume = newVolume;
+      setVolume(newVolume);
+      setIsMuted(newVolume === 0);
+    }
+  };
+
+  const toggleMute = () => {
+    if (videoRef.current) {
+      if (isMuted) {
+        videoRef.current.volume = volume;
+        setIsMuted(false);
+      } else {
+        videoRef.current.volume = 0;
+        setIsMuted(true);
+      }
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      videoRef.current?.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  // Timeline preview handlers
+  const handleProgressMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (progressBarRef.current && duration > 0) {
+      const rect = progressBarRef.current.getBoundingClientRect();
+      const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const hoverTime = percent * duration;
+      
+      setPreviewTime(hoverTime);
+      setPreviewPosition({
+        x: e.clientX,
+        y: rect.top
+      });
+      setShowPreview(true);
+      
+      // Update preview video
+      if (previewVideoRef.current && Math.abs(previewVideoRef.current.currentTime - hoverTime) > 0.5) {
+        previewVideoRef.current.currentTime = hoverTime;
+        
+        // Update canvas when video seeks
+        const updateCanvas = () => {
+          if (previewVideoRef.current && canvasRef.current) {
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext('2d');
+            if (ctx && previewVideoRef.current.readyState >= 2) {
+              ctx.clearRect(0, 0, 160, 90);
+              ctx.drawImage(previewVideoRef.current, 0, 0, 160, 90);
+            }
+          }
+        };
+        
+        previewVideoRef.current.addEventListener('seeked', updateCanvas, { once: true });
+        setTimeout(updateCanvas, 100); // Fallback
+      }
+    }
+  };
+
+  const handleProgressMouseLeave = () => {
+    setShowPreview(false);
+  };
+
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (progressBarRef.current && duration > 0) {
+      const rect = progressBarRef.current.getBoundingClientRect();
+      const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const newTime = percent * duration;
+      handleSeek(newTime);
+    }
+  };
+
+  // Controls visibility
+  const showControlsTemporarily = () => {
+    setShowControls(true);
+    if (controlsTimeout) {
+      clearTimeout(controlsTimeout);
+    }
+    const timeout = setTimeout(() => {
+      if (isPlaying) {
+        setShowControls(false);
+      }
+    }, 3000);
+    setControlsTimeout(timeout);
+  };
+
+  // Format time
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Watch party setup (same as before)
   useEffect(() => {
     if (isWatchParty) {
-      // Join watch party
       const joinWatchParty = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          console.error('No token found, user not logged in');
+        try {
+          const token = localStorage.getItem('token');
+          if (!token) {
+            console.error('No token found, user not logged in');
+            setIsWatchParty(false);
+            alert('Failed to join watch party. Please ensure you are logged in.');
+            return;
+          }
+          const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.WATCHPARTY_JOIN, id!, 'join'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+          });
+          if (!response.ok) {
+            console.error('Failed to join watch party:', await response.text());
+            setIsWatchParty(false);
+            alert('Failed to join watch party. Please ensure you are logged in.');
+          }
+        } catch (error) {
+          console.error('Error joining watch party:', error);
           setIsWatchParty(false);
-          alert('Failed to join watch party. Please ensure you are logged in.');
-          return;
+          alert('Error joining watch party. Please ensure you are logged in.');
         }
-        const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.WATCHPARTY_JOIN, id!, 'join'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-        });
-        if (!response.ok) {
-          console.error('Failed to join watch party:', await response.text());
-          setIsWatchParty(false);
-          alert('Failed to join watch party. Please ensure you are logged in.');
-        }
-      } catch (error) {
-        console.error('Error joining watch party:', error);
-        setIsWatchParty(false);
-        alert('Error joining watch party. Please ensure you are logged in.');
-      }
       };
       joinWatchParty();
 
-      // Setup WebSocket for watch party synchronization
       const token = localStorage.getItem('token');
-      // Include the token in the URL as a query parameter
       const websocket = new WebSocket(buildWebSocketUrl(API_CONFIG.ENDPOINTS.WS_WATCHPARTY, id!));
       
       websocket.onopen = () => {
         console.log('Watch Party WebSocket connected');
-        // Send the token as the first message for authentication
         if (token) {
           websocket.send(JSON.stringify({
             type: 'auth',
@@ -180,110 +286,43 @@ const VideoPlayer: React.FC = () => {
           }));
         }
       };
+
       websocket.onmessage = (event) => {
-        console.log('Received WebSocket message:', event.data);
         try {
           const message = JSON.parse(event.data);
-          console.log('Parsed message:', message);
-          
           if (message.type_field === 'watchPartyControl') {
-            console.log('Received watchPartyControl message:', message);
-            
-            // Check if this message is from the current user
             if (message.source_id && currentUserId) {
-              // Parse the user_id from the source_id (format: "user_{user_id}_time_{timestamp}")
               const sourceIdParts = message.source_id.split('_');
               if (sourceIdParts.length >= 2) {
                 const sourceUserId = parseInt(sourceIdParts[1]);
-                
-                // If the message is from the current user, drop it to avoid infinite loops
                 if (sourceUserId === currentUserId) {
-                  console.log('Dropping message from current user to avoid infinite loops');
                   return;
                 }
               }
             }
             
-            const player = plyrRef.current?.plyr;
-            if (player) {
+            if (videoRef.current) {
               if (message.action === 'play') {
-                console.log('Playing video at time:', player.currentTime);
-                player.play();
+                videoRef.current.play();
+                setIsPlaying(true);
               } else if (message.action === 'pause') {
-                console.log('Pausing video at time:', player.currentTime);
-                player.pause();
+                videoRef.current.pause();
+                setIsPlaying(false);
               } else if (message.action === 'seek' && message.time !== undefined) {
-                console.log('Seeking video to time:', message.time);
-                player.currentTime = message.time;
+                videoRef.current.currentTime = message.time;
+                setCurrentTime(message.time);
               }
-            } else {
-              console.error('Plyr player not found');
             }
-          } else {
-            console.log('Ignoring non-control message:', message);
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
         }
       };
-      websocket.onerror = (error) => {
-        console.error('Watch Party WebSocket error:', error);
-      };
-      websocket.onclose = () => {
-        console.log('Watch Party WebSocket closed');
-      };
 
       setWs(websocket);
-
-      return () => {
-        websocket.close();
-      };
+      return () => websocket.close();
     }
   }, [isWatchParty, id, currentUserId]);
-
-  // Event handlers for Plyr
-  const handleTimeUpdate = () => {
-    const player = plyrRef.current?.plyr;
-    if (player) {
-      setCurrentTime(player.currentTime);
-    }
-  };
-
-  const handlePlay = () => {
-    const player = plyrRef.current?.plyr;
-    if (player && isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
-      const message = {
-        action: 'play',
-        time: player.currentTime
-      };
-      console.log('Sending play message:', message);
-      ws.send(JSON.stringify(message));
-    }
-  };
-
-  const handlePause = () => {
-    const player = plyrRef.current?.plyr;
-    if (player && isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
-      const message = {
-        action: 'pause',
-        time: player.currentTime
-      };
-      console.log('Sending pause message:', message);
-      ws.send(JSON.stringify(message));
-    }
-  };
-
-  const handleSeeked = () => {
-    const player = plyrRef.current?.plyr;
-    if (player && isWatchParty && ws && ws.readyState === WebSocket.OPEN) {
-      const message = {
-        action: 'seek',
-        time: player.currentTime
-      };
-      console.log('Sending seek message:', message);
-      ws.send(JSON.stringify(message));
-    }
-  };
 
   return (
     <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default' }}>
@@ -304,43 +343,195 @@ const VideoPlayer: React.FC = () => {
                 position: 'relative',
               }}
             >
-              {/* Video Player */}
-              <Box sx={{ aspectRatio: '16/9', position: 'relative' }}>
-                <Plyr
-                  ref={plyrRef}
-                  source={{
-                    type: 'video',
-                    sources: [
-                      {
-                        src: videoUrl,
-                        type: 'video/mp4',
-                      }
-                    ]
-                  }}
-                  options={{
-                    controls: [
-                      'play-large',
-                      'play',
-                      'progress',
-                      'current-time',
-                      'duration',
-                      'mute',
-                      'volume',
-                      'settings',
-                      'fullscreen'
-                    ],
-                    settings: ['quality', 'speed'],
-                    quality: {
-                      default: 720,
-                      options: [1080, 720, 480, 360]
-                    }
+              {/* Custom Video Player */}
+              <Box 
+                sx={{ 
+                  aspectRatio: '16/9', 
+                  position: 'relative',
+                  backgroundColor: '#000',
+                  cursor: showControls ? 'default' : 'none',
+                }}
+                onMouseMove={showControlsTemporarily}
+                onMouseLeave={() => setShowControls(false)}
+              >
+                {/* Main Video */}
+                <video
+                  ref={videoRef}
+                  src={videoUrl}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'block',
                   }}
                   onTimeUpdate={handleTimeUpdate}
-                  onPlay={handlePlay}
-                  onPause={handlePause}
-                  onSeeked={handleSeeked}
+                  onLoadedMetadata={handleLoadedMetadata}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onClick={() => isPlaying ? handlePause() : handlePlay()}
                 />
-                
+
+                {/* Hidden Preview Video */}
+                <video
+                  ref={previewVideoRef}
+                  src={videoUrl}
+                  style={{
+                    position: 'absolute',
+                    top: '-9999px',
+                    left: '-9999px',
+                    width: '160px',
+                    height: '90px',
+                    visibility: 'hidden',
+                    pointerEvents: 'none'
+                  }}
+                  muted
+                  preload="metadata"
+                />
+
+                {/* Video Preview Tooltip */}
+                {showPreview && (
+                  <Box
+                    sx={{
+                      position: 'fixed',
+                      left: previewPosition.x,
+                      top: previewPosition.y - 10,
+                      zIndex: 9999,
+                      pointerEvents: 'none',
+                      transform: 'translateX(-50%) translateY(-100%)',
+                    }}
+                  >
+                    <Paper
+                      elevation={8}
+                      sx={{
+                        p: 1,
+                        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                        backdropFilter: 'blur(10px)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: 2,
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: 160,
+                          height: 90,
+                          borderRadius: 1,
+                          overflow: 'hidden',
+                          mb: 1,
+                          backgroundColor: '#000',
+                        }}
+                      >
+                        <canvas
+                          ref={canvasRef}
+                          width={160}
+                          height={90}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'block',
+                          }}
+                        />
+                      </Box>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: 'white',
+                          textAlign: 'center',
+                          display: 'block',
+                          fontSize: '0.75rem',
+                        }}
+                      >
+                        {formatTime(previewTime)}
+                      </Typography>
+                    </Paper>
+                  </Box>
+                )}
+
+                {/* Video Controls */}
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    background: 'linear-gradient(transparent, rgba(0,0,0,0.7))',
+                    p: 2,
+                    opacity: showControls ? 1 : 0,
+                    transition: 'opacity 0.3s ease',
+                  }}
+                >
+                  {/* Progress Bar */}
+                  <Box
+                    ref={progressBarRef}
+                    sx={{
+                      height: 6,
+                      backgroundColor: 'rgba(255,255,255,0.3)',
+                      borderRadius: 3,
+                      mb: 2,
+                      cursor: 'pointer',
+                      position: 'relative',
+                    }}
+                    onMouseMove={handleProgressMouseMove}
+                    onMouseLeave={handleProgressMouseLeave}
+                    onClick={handleProgressClick}
+                  >
+                    <Box
+                      sx={{
+                        height: '100%',
+                        backgroundColor: 'primary.main',
+                        borderRadius: 3,
+                        width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`,
+                      }}
+                    />
+                  </Box>
+
+                  {/* Control Buttons */}
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <IconButton
+                      onClick={() => isPlaying ? handlePause() : handlePlay()}
+                      sx={{ color: 'white' }}
+                    >
+                      {isPlaying ? <PauseIcon /> : <PlayIcon />}
+                    </IconButton>
+
+                    <Typography variant="body2" sx={{ color: 'white', minWidth: 100 }}>
+                      {formatTime(currentTime)} / {formatTime(duration)}
+                    </Typography>
+
+                    <Box sx={{ flexGrow: 1 }} />
+
+                    <IconButton
+                      onClick={toggleMute}
+                      sx={{ color: 'white' }}
+                    >
+                      {isMuted ? <VolumeOffIcon /> : <VolumeUpIcon />}
+                    </IconButton>
+
+                    <Box sx={{ width: 100 }}>
+                      <Slider
+                        value={isMuted ? 0 : volume}
+                        onChange={(_, value) => handleVolumeChange(value as number)}
+                        min={0}
+                        max={1}
+                        step={0.1}
+                        size="small"
+                        sx={{ color: 'white' }}
+                      />
+                    </Box>
+
+                    <IconButton
+                      onClick={() => setIsFullWidth(!isFullWidth)}
+                      sx={{ color: 'white' }}
+                    >
+                      <AspectRatioIcon />
+                    </IconButton>
+
+                    <IconButton
+                      onClick={toggleFullscreen}
+                      sx={{ color: 'white' }}
+                    >
+                      {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+                    </IconButton>
+                  </Stack>
+                </Box>
               </Box>
 
               {/* Video Info */}
