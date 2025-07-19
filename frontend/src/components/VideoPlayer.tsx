@@ -1,5 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import {
+  Container,
+  Box,
+  Typography,
+  Chip,
+  IconButton,
+  Paper,
+  Tooltip,
+} from '@mui/material';
+import {
+  Fullscreen as FullscreenIcon,
+  FullscreenExit as FullscreenExitIcon,
+} from '@mui/icons-material';
 import Plyr from 'plyr-react';
 import CommentSection from './CommentSection';
 import Navbar from './Navbar';
@@ -13,6 +26,7 @@ const VideoPlayer: React.FC = () => {
   const [isWatchParty, setIsWatchParty] = useState(false);
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [isFullWidth, setIsFullWidth] = useState(false);
   
   // Extract user ID from JWT token
   useEffect(() => {
@@ -34,6 +48,59 @@ const VideoPlayer: React.FC = () => {
 
   const plyrRef = useRef<any>(null);
   const [currentTime, setCurrentTime] = useState(0);
+
+  // Custom Plyr setup with resize button
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (plyrRef.current?.plyr) {
+        const player = plyrRef.current.plyr;
+        const controls = player.elements?.controls;
+        
+        if (controls && !controls.querySelector('[data-plyr="resize"]')) {
+          // Create custom resize button
+          const resizeButton = document.createElement('button');
+          resizeButton.className = 'plyr__control';
+          resizeButton.type = 'button';
+          resizeButton.setAttribute('data-plyr', 'resize');
+          resizeButton.innerHTML = `
+            <svg width="22" height="22" viewBox="0 0 24 24" role="presentation" focusable="false" style="display: block; margin: auto;">
+              <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" fill="currentColor"/>
+            </svg>
+            <span class="plyr__tooltip" role="tooltip">${isFullWidth ? 'Fit to container' : 'Expand to full width'}</span>
+          `;
+          
+          // Add custom styling for better alignment
+          resizeButton.style.cssText = `
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            padding: 0;
+          `;
+          
+          // Add pressed class based on current state
+          if (isFullWidth) {
+            resizeButton.classList.add('plyr__control--pressed');
+          }
+          
+          // Add click handler
+          resizeButton.addEventListener('click', () => {
+            setIsFullWidth(!isFullWidth);
+            resizeButton.classList.toggle('plyr__control--pressed');
+          });
+          
+          // Insert before fullscreen button
+          const fullscreenButton = controls.querySelector('[data-plyr="fullscreen"]');
+          if (fullscreenButton) {
+            controls.insertBefore(resizeButton, fullscreenButton);
+          }
+        }
+      }
+    }, 1000); // Wait for Plyr to be fully initialized
+
+    return () => clearTimeout(timer);
+  }, [videoUrl, isFullWidth]);
 
   useEffect(() => {
     const fetchVideo = async () => {
@@ -219,13 +286,26 @@ const VideoPlayer: React.FC = () => {
   };
 
   return (
-    <div className="video-container-themed min-h-screen">
+    <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default' }}>
       <Navbar onWatchPartyToggle={() => setIsWatchParty(!isWatchParty)} isWatchParty={isWatchParty} />
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col lg:flex-row gap-4">
-          <div className="flex-1">
-            <div className="video-card-themed rounded-lg shadow-md overflow-hidden">
-              <div className="aspect-w-16 aspect-h-9">
+      
+      <Container maxWidth="xl" sx={{ py: 3 }}>
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: { xs: 'column', lg: 'row' }, 
+          gap: 3 
+        }}>
+          {/* Video Section */}
+          <Box sx={{ flex: 1 }}>
+            <Paper 
+              elevation={0}
+              sx={{ 
+                overflow: 'hidden',
+                position: 'relative',
+              }}
+            >
+              {/* Video Player */}
+              <Box sx={{ aspectRatio: '16/9', position: 'relative' }}>
                 <Plyr
                   ref={plyrRef}
                   source={{
@@ -260,31 +340,64 @@ const VideoPlayer: React.FC = () => {
                   onPause={handlePause}
                   onSeeked={handleSeeked}
                 />
-              </div>
-              <div className="p-4">
-                <h2 className="text-2xl font-bold video-title-themed">{video ? video.title : 'Loading...'}</h2>
-                <p className="mt-2 video-description-themed">{video ? video.description : 'Loading description...'}</p>
-                <p className="video-description-themed text-xs mt-1">Views: {video ? video.view_count : 0}</p>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {video && video.tags && video.tags.map((tag: string) => (
-                    <button
-                      key={tag}
-                      onClick={() => navigate(`/tag/${tag}`)}
-                      className="text-xs tag-themed px-2 py-1 rounded"
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="lg:w-1/3">
+                
+              </Box>
+
+              {/* Video Info */}
+              <Box sx={{ p: 3 }}>
+                <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 700 }}>
+                  {video ? video.title : 'Loading...'}
+                </Typography>
+                
+                <Typography variant="body1" color="text.secondary" sx={{ mb: 2, lineHeight: 1.6 }}>
+                  {video ? video.description : 'Loading description...'}
+                </Typography>
+                
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+                  Views: {video ? video.view_count.toLocaleString() : 0}
+                </Typography>
+                
+                {/* Tags */}
+                {video && video.tags && video.tags.length > 0 && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 2 }}>
+                    {video.tags.map((tag: string) => (
+                      <Chip
+                        key={tag}
+                        label={tag}
+                        size="small"
+                        variant="outlined"
+                        onClick={() => navigate(`/tag/${tag}`)}
+                        sx={{ 
+                          cursor: 'pointer',
+                          '&:hover': {
+                            backgroundColor: 'primary.main',
+                            color: 'primary.contrastText',
+                          },
+                        }}
+                      />
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            </Paper>
+          </Box>
+          
+          {/* Comments Section */}
+          {!isFullWidth && (
+            <Box sx={{ width: { xs: '100%', lg: '400px' }, flexShrink: 0 }}>
+              <CommentSection videoId={parseInt(id || '0')} currentTime={currentTime} />
+            </Box>
+          )}
+        </Box>
+        
+        {/* Comments below video when full width */}
+        {isFullWidth && (
+          <Box sx={{ mt: 3 }}>
             <CommentSection videoId={parseInt(id || '0')} currentTime={currentTime} />
-          </div>
-        </div>
-      </main>
-    </div>
+          </Box>
+        )}
+      </Container>
+    </Box>
   );
 };
 
