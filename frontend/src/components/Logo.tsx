@@ -1,7 +1,43 @@
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, keyframes } from '@mui/material';
 import { PlayArrow } from '@mui/icons-material';
 import { useTheme } from '../contexts/ThemeContext';
+
+// Streaming animation keyframes
+const streamingPulse = keyframes`
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+`;
+
+const flowAnimation = keyframes`
+  0% {
+    opacity: 0.3;
+  }
+  33% {
+    opacity: 1;
+  }
+  66% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0.3;
+  }
+`;
+
+const textGlow = keyframes`
+  0%, 100% {
+    text-shadow: 0 0 5px transparent;
+  }
+  50% {
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+  }
+`;
 
 const Logo: React.FC<{ className?: string }> = ({ className = '' }) => {
   const { currentTheme } = useTheme();
@@ -12,7 +48,7 @@ const Logo: React.FC<{ className?: string }> = ({ className = '' }) => {
       sx={{ 
         display: 'flex', 
         alignItems: 'center', 
-        gap: 1.5,
+        gap: 0.75,
         height: '36px'
       }}
     >
@@ -28,8 +64,9 @@ const Logo: React.FC<{ className?: string }> = ({ className = '' }) => {
           position: 'relative',
         }}
       >
-        {/* Three subtle dots representing streaming/flow */}
+        {/* Three animated dots representing streaming/flow */}
         <Box
+          className="dots-container"
           sx={{
             display: 'flex',
             gap: 0.25,
@@ -42,7 +79,8 @@ const Logo: React.FC<{ className?: string }> = ({ className = '' }) => {
               height: 3,
               borderRadius: '50%',
               background: `linear-gradient(45deg, ${currentTheme.primary}60, ${currentTheme.accent}40)`,
-              opacity: 0.7,
+              animation: `${flowAnimation} 2s ease-in-out infinite`,
+              animationDelay: '0s',
             }}
           />
           <Box
@@ -51,7 +89,8 @@ const Logo: React.FC<{ className?: string }> = ({ className = '' }) => {
               height: 4,
               borderRadius: '50%',
               background: `linear-gradient(45deg, ${currentTheme.primary}70, ${currentTheme.accent}50)`,
-              opacity: 0.8,
+              animation: `${streamingPulse} 2s ease-in-out infinite`,
+              animationDelay: '0.3s',
             }}
           />
           <Box
@@ -60,17 +99,37 @@ const Logo: React.FC<{ className?: string }> = ({ className = '' }) => {
               height: 3,
               borderRadius: '50%',
               background: `linear-gradient(45deg, ${currentTheme.primary}60, ${currentTheme.accent}40)`,
-              opacity: 0.7,
+              animation: `${flowAnimation} 2s ease-in-out infinite`,
+              animationDelay: '0.6s',
             }}
           />
         </Box>
       </Box>
       
-      {/* Logo text */}
-      <Box sx={{ display: 'flex', alignItems: 'baseline' }}>
+      {/* Logo text with hover animation */}
+      <Box 
+        sx={{ 
+          display: 'flex', 
+          alignItems: 'baseline',
+          cursor: 'pointer',
+          transition: 'all 0.3s ease',
+          '&:hover': {
+            transform: 'translateY(-1px)',
+            '& .logo-text': {
+              animation: `${textGlow} 2s ease-in-out infinite`,
+            },
+            '& .dots-container': {
+              '& > div': {
+                animationDuration: '1s !important',
+              }
+            }
+          }
+        }}
+      >
         <Typography
           variant="h6"
           component="span"
+          className="logo-text"
           sx={{
             fontFamily: '"Satoshi", system-ui, -apple-system, sans-serif',
             fontWeight: 600,
@@ -78,6 +137,7 @@ const Logo: React.FC<{ className?: string }> = ({ className = '' }) => {
             letterSpacing: '-0.02em',
             color: currentTheme.primary,
             lineHeight: 1,
+            transition: 'all 0.3s ease',
           }}
         >
           Vibe
@@ -85,6 +145,7 @@ const Logo: React.FC<{ className?: string }> = ({ className = '' }) => {
         <Typography
           variant="h6"
           component="span"
+          className="logo-text"
           sx={{
             fontFamily: '"Satoshi", system-ui, -apple-system, sans-serif',
             fontWeight: 600,
@@ -92,6 +153,7 @@ const Logo: React.FC<{ className?: string }> = ({ className = '' }) => {
             letterSpacing: '-0.02em',
             color: currentTheme.accent,
             lineHeight: 1,
+            transition: 'all 0.3s ease',
           }}
         >
           Stream
