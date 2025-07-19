@@ -3,3 +3,129 @@
 @tailwind utilities;
 
 @import 'plyr/dist/plyr.css';
+
+/* Theme CSS Variables */
+:root {
+  --theme-primary: #4f46e5;
+  --theme-secondary: #3730a3;
+  --theme-accent: #6366f1;
+  --theme-background: #f9fafb;
+  --theme-surface: #ffffff;
+  --theme-text: #111827;
+  --theme-text-secondary: #6b7280;
+  --plyr-color-main: #4f46e5;
+}
+
+/* Theme-aware component styles */
+.theme-bg {
+  background-color: var(--theme-background);
+  color: var(--theme-text);
+}
+
+.theme-surface {
+  background-color: var(--theme-surface);
+  color: var(--theme-text);
+}
+
+.theme-primary {
+  background-color: var(--theme-primary);
+  color: white;
+}
+
+.theme-text {
+  color: var(--theme-text);
+}
+
+.theme-text-secondary {
+  color: var(--theme-text-secondary);
+}
+
+/* Override Plyr styles with theme colors */
+.plyr {
+  --plyr-color-main: var(--plyr-color-main);
+}
+
+.plyr--video .plyr__control:hover,
+.plyr--video .plyr__control[aria-expanded="true"] {
+  background: var(--plyr-color-main);
+}
+
+.plyr__progress__played {
+  background-color: var(--plyr-color-main);
+}
+
+.plyr__volume--display {
+  background: var(--plyr-color-main);
+}
+
+.plyr--full-ui input[type="range"] {
+  color: var(--plyr-color-main);
+}
+
+/* Theme-aware navbar */
+.navbar-themed {
+  background-color: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-text-secondary);
+}
+
+.navbar-themed .navbar-title {
+  color: var(--theme-text);
+}
+
+.navbar-themed .navbar-button {
+  background-color: var(--theme-primary);
+  color: white;
+}
+
+.navbar-themed .navbar-button:hover {
+  background-color: var(--theme-secondary);
+}
+
+/* Theme-aware video player container */
+.video-container-themed {
+  background-color: var(--theme-background);
+  color: var(--theme-text);
+}
+
+.video-card-themed {
+  background-color: var(--theme-surface);
+  color: var(--theme-text);
+  border: 1px solid var(--theme-text-secondary);
+}
+
+.video-title-themed {
+  color: var(--theme-text);
+}
+
+.video-description-themed {
+  color: var(--theme-text-secondary);
+}
+
+/* Theme-aware tags */
+.tag-themed {
+  background-color: var(--theme-accent);
+  color: white;
+}
+
+.tag-themed:hover {
+  background-color: var(--theme-primary);
+}
+
+/* Theme-aware comments */
+.comment-section-themed {
+  background-color: var(--theme-surface);
+  color: var(--theme-text);
+}
+
+.comment-themed {
+  background-color: var(--theme-background);
+  color: var(--theme-text);
+  border: 1px solid var(--theme-text-secondary);
+}
+
+/* Ensure body uses theme colors */
+body {
+  background-color: var(--theme-background);
+  color: var(--theme-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}

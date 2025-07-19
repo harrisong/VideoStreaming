@@ -134,45 +134,61 @@ const CommentSection: React.FC<CommentSectionProps> = ({ videoId, currentTime })
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="bg-white rounded-lg shadow-md p-3">
+      <div className="comment-section-themed rounded-lg shadow-md p-3">
         <div className="flex justify-between items-center mb-2">
-          <h3 className="text-lg font-semibold">Live Comments</h3>
+          <h3 className="text-lg font-semibold theme-text">Live Comments</h3>
           <button 
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none"
+            className="p-1 rounded-md hover:opacity-80 focus:outline-none"
+            style={{
+              backgroundColor: 'var(--theme-accent)',
+              color: 'var(--theme-text)'
+            }}
           >
             {isCollapsed ? '▶' : '▼'}
           </button>
         </div>
         {!isCollapsed && (
-          <div className="border rounded-md overflow-y-auto h-96 p-2 bg-gray-50">
+          <div className="border rounded-md overflow-y-auto h-96 p-2" style={{
+            backgroundColor: 'var(--theme-background)',
+            borderColor: 'var(--theme-text-secondary)'
+          }}>
             {visibleComments.map(comment => (
-              <div key={comment.id} className="mb-2 p-2 border-b border-gray-200">
+              <div key={comment.id} className="comment-themed mb-2 p-2 border-b">
                 <div className="flex justify-between items-center mb-1">
-                  <span className="font-semibold text-sm">User {comment.user_id}</span>
-                  <span className="text-xs text-gray-500">{formatTime(comment.video_time)}</span>
+                  <span className="font-semibold text-sm theme-text">User {comment.user_id}</span>
+                  <span className="text-xs theme-text-secondary">{formatTime(comment.video_time)}</span>
                 </div>
-                <p className="text-gray-800 text-sm">{comment.content}</p>
+                <p className="theme-text text-sm">{comment.content}</p>
               </div>
             ))}
           </div>
         )}
       </div>
       <div className="flex-1">
-        <h3 className="text-lg font-semibold mb-2">Comments</h3>
+        <h3 className="text-lg font-semibold mb-2 theme-text">Comments</h3>
         <form onSubmit={handleCommentSubmit} className="mb-4">
           <div className="flex items-start gap-2">
             <textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               placeholder="Add a comment..."
-              className="flex-1 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 p-2 border rounded-md focus:outline-none focus:ring-2"
+              style={{
+                backgroundColor: 'var(--theme-surface)',
+                color: 'var(--theme-text)',
+                borderColor: 'var(--theme-text-secondary)'
+              }}
               rows={3}
             />
             <button
               type="button"
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              className="p-2 bg-gray-200 rounded-md hover:bg-gray-300"
+              className="p-2 rounded-md hover:opacity-80"
+              style={{
+                backgroundColor: 'var(--theme-accent)',
+                color: 'var(--theme-text)'
+              }}
             >
               😊
             </button>
@@ -184,7 +200,10 @@ const CommentSection: React.FC<CommentSectionProps> = ({ videoId, currentTime })
           )}
           <button
             type="submit"
-            className="mt-2 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="mt-2 px-4 py-2 text-white rounded-md hover:opacity-90 focus:outline-none focus:ring-2"
+            style={{
+              backgroundColor: 'var(--theme-primary)'
+            }}
           >
             Post Comment
           </button>

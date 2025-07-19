@@ -7,7 +7,7 @@ use jsonwebtoken::{decode, DecodingKey, Validation};
 use std::env;
 
 use crate::websocket::broadcast_comment;
-use crate::models::{RegisterRequest, LoginRequest, CommentRequest, Comment, Video, User, Claims};
+use crate::models::{RegisterRequest, LoginRequest, CommentRequest, Comment, Video, User, Claims, UserSettingsRequest};
 use crate::AppState;
 
 #[post("/api/auth/register")]
@@ -18,7 +18,7 @@ async fn register(
     let state = state.lock().await;
     let hashed_password = bcrypt::hash(&req.password, bcrypt::DEFAULT_COST).unwrap();
     let result = sqlx::query_as::<_, User>(
-        "INSERT INTO users (username, email, password, created_at) VALUES ($1, $2, $3, $4) RETURNING id, username, email, password, created_at"
+        "INSERT INTO users (username, email, password, created_at) VALUES ($1, $2, $3, $4) RETURNING *"
     )
     .bind(&req.username)
     .bind(&req.email)
@@ -484,6 +484,133 @@ async fn get_thumbnail(
     }
 }
 
+#[get("/api/user/settings")]
+async fn get_user_settings(
+    state: web::Data<Arc<Mutex<AppState>>>,
+    http_req: actix_web::HttpRequest,
+) -> actix_web::HttpResponse {
+    let state = state.lock().await;
+
+    // Extract the JWT token from the Authorization header
+    let auth_header = http_req.headers().get(actix_web::http::header::AUTHORIZATION);
+    let token = auth_header.and_then(|h| h.to_str().ok()).and_then(|h| h.strip_prefix("Bearer ")).map(String::from);
+
+    let jwt_secret = env::var("JWT_SECRET").unwrap_or_else(|_| "secure_jwt_secret_key_12345".to_string());
+    let claims_result = token.and_then(|t| {
+        decode::<Claims>(
+            &t,
+            &DecodingKey::from_secret(jwt_secret.as_ref()),
+            &Validation::default(),
+        ).ok()
+    });
+
+    let claims = match claims_result {
+        Some(decoded) => decoded.claims,
+        None => {
+            return actix_web::HttpResponse::Forbidden().json(json!({
+                "error": "Unauthorized: Invalid or missing token"
+            }));
+        }
+    };
+
+    let user_id = claims.user_id;
+
+    let result = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(&state.db_pool)
+        .await;
+
+    match result {
+        Ok(user) => {
+            actix_web::HttpResponse::Ok().json(json!({
+                "settings": user.settings.unwrap_or(json!({}))
+            }))
+        }
+        Err(e) => {
+            error!("Error fetching user settings: {:?}", e);
+            actix_web::HttpResponse::InternalServerError().json(json!({
+                "error": "Internal server error"
+            }))
+        }
+    }
+}
+
+#[post("/api/user/settings")]
+async fn update_user_settings(
+    json_req: web::Json<UserSettingsRequest>,
+    state: web::Data<Arc<Mutex<AppState>>>,
+    http_req: actix_web::HttpRequest,
+) -> actix_web::HttpResponse {
+    let state = state.lock().await;
+
+    // Extract the JWT token from the Authorization header
+    let auth_header = http_req.headers().get(actix_web::http::header::AUTHORIZATION);
+    let token = auth_header.and_then(|h| h.to_str().ok()).and_then(|h| h.strip_prefix("Bearer ")).map(String::from);
+
+    let jwt_secret = env::var("JWT_SECRET").unwrap_or_else(|_| "secure_jwt_secret_key_12345".to_string());
+    let claims_result = token.and_then(|t| {
+        decode::<Claims>(
+            &t,
+            &DecodingKey::from_secret(jwt_secret.as_ref()),
+            &Validation::default(),
+        ).ok()
+    });
+
+    let claims = match claims_result {
+        Some(decoded) => decoded.claims,
+        None => {
+            return actix_web::HttpResponse::Forbidden().json(json!({
+                "error": "Unauthorized: Invalid or missing token"
+            }));
+        }
+    };
+
+    let user_id = claims.user_id;
+
+    // Get current settings
+    let current_user_result = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(&state.db_pool)
+        .await;
+
+    let mut current_settings = match current_user_result {
+        Ok(user) => user.settings.unwrap_or(json!({})),
+        Err(e) => {
+            error!("Error fetching current user settings: {:?}", e);
+            return actix_web::HttpResponse::InternalServerError().json(json!({
+                "error": "Internal server error"
+            }));
+        }
+    };
+
+    // Update theme if provided
+    if let Some(theme) = &json_req.theme {
+        current_settings["theme"] = theme.clone();
+    }
+
+    // Update the user's settings
+    let result = sqlx::query("UPDATE users SET settings = $1 WHERE id = $2")
+        .bind(&current_settings)
+        .bind(user_id)
+        .execute(&state.db_pool)
+        .await;
+
+    match result {
+        Ok(_) => {
+            actix_web::HttpResponse::Ok().json(json!({
+                "message": "Settings updated successfully",
+                "settings": current_settings
+            }))
+        }
+        Err(e) => {
+            error!("Error updating user settings: {:?}", e);
+            actix_web::HttpResponse::InternalServerError().json(json!({
+                "error": "Internal server error"
+            }))
+        }
+    }
+}
+
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(register)
        .service(login)
@@ -499,5 +626,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
        .service(get_comments)
        .service(join_watch_party)
        .service(control_watch_party)
-       .service(get_thumbnail);
+       .service(get_thumbnail)
+       .service(get_user_settings)
+       .service(update_user_settings);
 }

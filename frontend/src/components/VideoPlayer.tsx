@@ -219,12 +219,12 @@ const VideoPlayer: React.FC = () => {
   };
 
   return (
-    <div className="bg-gray-100 min-h-screen">
+    <div className="video-container-themed min-h-screen">
       <Navbar onWatchPartyToggle={() => setIsWatchParty(!isWatchParty)} isWatchParty={isWatchParty} />
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="flex-1">
-            <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div className="video-card-themed rounded-lg shadow-md overflow-hidden">
               <div className="aspect-w-16 aspect-h-9">
                 <Plyr
                   ref={plyrRef}
@@ -262,15 +262,15 @@ const VideoPlayer: React.FC = () => {
                 />
               </div>
               <div className="p-4">
-                <h2 className="text-2xl font-bold text-gray-900">{video ? video.title : 'Loading...'}</h2>
-                <p className="mt-2 text-gray-600">{video ? video.description : 'Loading description...'}</p>
-                <p className="text-gray-500 text-xs mt-1">Views: {video ? video.view_count : 0}</p>
+                <h2 className="text-2xl font-bold video-title-themed">{video ? video.title : 'Loading...'}</h2>
+                <p className="mt-2 video-description-themed">{video ? video.description : 'Loading description...'}</p>
+                <p className="video-description-themed text-xs mt-1">Views: {video ? video.view_count : 0}</p>
                 <div className="mt-2 flex flex-wrap gap-1">
                   {video && video.tags && video.tags.map((tag: string) => (
                     <button
                       key={tag}
                       onClick={() => navigate(`/tag/${tag}`)}
-                      className="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded"
+                      className="text-xs tag-themed px-2 py-1 rounded"
                     >
                       {tag}
                     </button>

@@ -35,6 +35,9 @@ export const API_CONFIG = {
     LOGOUT: '/api/auth/logout',
     USERS: '/api/auth/users',
     
+    // User settings
+    USER_SETTINGS: '/api/user/settings',
+    
     // Video endpoints
     VIDEOS: '/api/videos',
     VIDEO_SEARCH: '/api/videos/search',

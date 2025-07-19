@@ -9,6 +9,7 @@ pub struct User {
     pub email: String,
     pub password: String,
     pub created_at: Option<NaiveDateTime>,
+    pub settings: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -58,4 +59,9 @@ pub struct CommentRequest {
 pub struct Claims {
     pub user_id: i32,
     pub exp: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserSettingsRequest {
+    pub theme: Option<serde_json::Value>,
 }
