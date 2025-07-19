@@ -8,6 +8,7 @@ services:
       - "3000:80"
     volumes:
       - node_modules:/usr/src/app/node_modules
+      - ./frontend/nginx.dev.conf:/etc/nginx/conf.d/default.conf
     networks:
       - app-network
 
