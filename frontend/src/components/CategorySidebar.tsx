@@ -15,6 +15,7 @@ import {
 import {
   Category as CategoryIcon,
   ArrowForward as ArrowForwardIcon,
+  VideoLibrary as VideoLibraryIcon,
 } from '@mui/icons-material';
 import { buildApiUrl, API_CONFIG } from '../config';
 
@@ -23,12 +24,37 @@ interface Category {
   name: string;
   description: string;
   created_at: string;
+  icon_svg?: string;
 }
 
 interface CategorySidebarProps {
   onCategorySelect: (categoryId: number | null) => void;
   selectedCategoryId: number | null;
 }
+
+// Component to render SVG icons safely
+const CategoryIconSvg: React.FC<{ svgString?: string; size?: number }> = ({ svgString, size = 20 }) => {
+  if (!svgString) {
+    return <CategoryIcon sx={{ width: size, height: size }} />;
+  }
+
+  return (
+    <Box
+      sx={{
+        width: size,
+        height: size,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        '& svg': {
+          width: '100%',
+          height: '100%',
+        },
+      }}
+      dangerouslySetInnerHTML={{ __html: svgString }}
+    />
+  );
+};
 
 const CategorySidebar: React.FC<CategorySidebarProps> = ({ onCategorySelect, selectedCategoryId }) => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -91,6 +117,9 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({ onCategorySelect, sel
             selected={selectedCategoryId === null}
             sx={{
               borderRadius: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
               '&.Mui-selected': {
                 backgroundColor: 'primary.main',
                 color: 'primary.contrastText',
@@ -100,6 +129,7 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({ onCategorySelect, sel
               },
             }}
           >
+            <VideoLibraryIcon sx={{ width: 18, height: 18 }} />
             <ListItemText 
               primary="All Videos" 
               primaryTypographyProps={{ 
@@ -117,6 +147,9 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({ onCategorySelect, sel
               selected={selectedCategoryId === category.id}
               sx={{
                 borderRadius: 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
                 '&.Mui-selected': {
                   backgroundColor: 'primary.main',
                   color: 'primary.contrastText',
@@ -126,6 +159,7 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({ onCategorySelect, sel
                 },
               }}
             >
+              <CategoryIconSvg svgString={category.icon_svg} size={18} />
               <ListItemText 
                 primary={category.name}
                 primaryTypographyProps={{ 

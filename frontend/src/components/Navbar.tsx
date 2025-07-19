@@ -103,8 +103,12 @@ const Navbar: React.FC<{
   return (
     <>
       <AppBar position="static" elevation={1}>
-        <Container maxWidth="xl">
-          <Toolbar sx={{ justifyContent: 'space-between' }}>
+        <Container maxWidth="xl" sx={{ px: { xs: 1, sm: 2 } }}>
+          <Toolbar sx={{ 
+            justifyContent: 'space-between',
+            minHeight: { xs: 56, sm: 64 },
+            px: '0 !important'
+          }}>
             {/* Logo */}
             <IconButton
               color="inherit"
@@ -210,15 +214,6 @@ const Navbar: React.FC<{
               title="Categories"
             >
               <CategoryIcon />
-            </IconButton>
-
-            {/* Theme Picker Button */}
-            <IconButton
-              color="inherit"
-              onClick={() => setIsThemePickerOpen(true)}
-              title="Theme Settings"
-            >
-              <PaletteIcon />
             </IconButton>
 
             {/* Watch Party Button */}
@@ -363,6 +358,12 @@ const Navbar: React.FC<{
               </Box>
             </MenuItem>
             <Divider />
+            <MenuItem onClick={() => setIsThemePickerOpen(true)}>
+              <ListItemIcon>
+                <PaletteIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Theme Settings</ListItemText>
+            </MenuItem>
             <MenuItem onClick={handleLogout}>
               <ListItemIcon>
                 <LogoutIcon fontSize="small" />

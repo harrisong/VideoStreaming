@@ -8,6 +8,7 @@ interface Category {
   name: string;
   description: string;
   created_at: string;
+  icon_svg?: string;
 }
 
 interface Video {
@@ -48,9 +49,16 @@ const Categories: React.FC = () => {
         credentials: 'include'
       });
       const data = await response.json();
-      setCategories(data);
+      // Ensure data is an array
+      if (Array.isArray(data)) {
+        setCategories(data);
+      } else {
+        console.error('Categories API returned non-array data:', data);
+        setCategories([]);
+      }
     } catch (error) {
       console.error('Error fetching categories:', error);
+      setCategories([]);
     }
   };
 
@@ -101,6 +109,13 @@ const Categories: React.FC = () => {
                   onClick={() => handleCategoryClick(category)}
                   className="category-card-themed p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 text-center"
                 >
+                  {/* Category Icon */}
+                  {category.icon_svg && (
+                    <div 
+                      className="w-8 h-8 mx-auto mb-3 theme-text"
+                      dangerouslySetInnerHTML={{ __html: category.icon_svg }}
+                    />
+                  )}
                   <h3 className="font-semibold theme-text text-sm mb-2">{category.name}</h3>
                   <p className="theme-text-secondary text-xs">{category.description}</p>
                 </button>

@@ -45,6 +45,7 @@ pub struct Category {
     pub name: String,
     pub description: Option<String>,
     pub created_at: Option<NaiveDateTime>,
+    pub icon_svg: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
