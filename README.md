@@ -1,6 +1,10 @@
-# VideoStreaming Platform
+<div align="center">
+  <img src="logo.svg" alt="VibeStream" width="280" height="64">
+  
+  # VibeStream Platform
 
-A comprehensive video streaming platform with frontend, backend, and YouTube scraping capabilities.
+  A comprehensive video streaming platform with frontend, backend, and YouTube scraping capabilities.
+</div>
 
 ## Project Structure
 

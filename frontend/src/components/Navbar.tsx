@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { buildApiUrl, API_CONFIG } from '../config';
 import ThemePicker from './ThemePicker';
+import Logo from './Logo';
 
 const Navbar: React.FC<{ onWatchPartyToggle?: () => void; isWatchParty?: boolean; onSearch?: (query: string) => void }> = ({ onWatchPartyToggle, isWatchParty, onSearch }) => {
   const navigate = useNavigate();
@@ -47,9 +48,9 @@ const Navbar: React.FC<{ onWatchPartyToggle?: () => void; isWatchParty?: boolean
       <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
         <button
           onClick={() => navigate('/home')}
-          className="text-lg leading-6 font-medium navbar-title bg-transparent border-none cursor-pointer"
+          className="bg-transparent border-none cursor-pointer p-1 hover:opacity-80 transition-opacity"
         >
-          Video Streaming
+          <Logo />
         </button>
         
         {/* Search Bar */}
