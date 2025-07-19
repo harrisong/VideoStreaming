@@ -9,6 +9,14 @@ import {
   IconButton,
   Slider,
   Stack,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemAvatar,
+  Avatar,
+  Divider,
+  Button,
+  Tooltip,
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
@@ -19,6 +27,11 @@ import {
   FullscreenExit as FullscreenExitIcon,
   Settings as SettingsIcon,
   AspectRatio as AspectRatioIcon,
+  SkipNext as SkipNextIcon,
+  SkipPrevious as SkipPreviousIcon,
+  PlaylistPlay as PlaylistPlayIcon,
+  Shuffle as ShuffleIcon,
+  Repeat as RepeatIcon,
 } from '@mui/icons-material';
 import CommentSection from './CommentSection';
 import Navbar from './Navbar';
@@ -54,6 +67,15 @@ const VideoPlayer: React.FC = () => {
   const [previewTime, setPreviewTime] = useState(0);
   const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
 
+  // Playlist state
+  const [playlist, setPlaylist] = useState<any[]>([]);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [suggestedVideos, setSuggestedVideos] = useState<any[]>([]);
+  const [autoplay, setAutoplay] = useState(true);
+  const [shuffle, setShuffle] = useState(false);
+  const [repeat, setRepeat] = useState(false);
+  const [showPlaylist, setShowPlaylist] = useState(false);
+
   // Extract user ID from JWT token
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -70,7 +92,7 @@ const VideoPlayer: React.FC = () => {
     }
   }, []);
 
-  // Fetch video data
+  // Fetch video data and suggested videos
   useEffect(() => {
     const fetchVideo = async () => {
       try {
@@ -80,12 +102,44 @@ const VideoPlayer: React.FC = () => {
         const data = await response.json();
         setVideo(data);
         setVideoUrl(buildApiUrl(API_CONFIG.ENDPOINTS.VIDEO_STREAM, id!, 'stream'));
+        
+        // If no playlist, add current video and fetch suggested videos
+        if (playlist.length === 0) {
+          setPlaylist([data]);
+          setCurrentVideoIndex(0);
+          fetchSuggestedVideos(data);
+        }
       } catch (error) {
         console.error('Error fetching video:', error);
       }
     };
     fetchVideo();
   }, [id]);
+
+  // Fetch suggested videos
+  const fetchSuggestedVideos = async (currentVideo: any) => {
+    try {
+      // Fetch videos from the same category or with similar tags
+      const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.VIDEOS), {
+        credentials: 'include'
+      });
+      const allVideos = await response.json();
+      
+      // Filter out current video and get suggested ones
+      const suggested = allVideos
+        .filter((v: any) => v.id !== currentVideo.id)
+        .slice(0, 10); // Get top 10 suggested videos
+      
+      setSuggestedVideos(suggested);
+      
+      // Auto-queue suggested videos if no playlist
+      if (playlist.length <= 1) {
+        setPlaylist([currentVideo, ...suggested.slice(0, 5)]);
+      }
+    } catch (error) {
+      console.error('Error fetching suggested videos:', error);
+    }
+  };
 
   // Video event handlers
   const handlePlay = () => {
@@ -235,6 +289,81 @@ const VideoPlayer: React.FC = () => {
     setControlsTimeout(timeout);
   };
 
+  // Playlist handlers
+  const playNext = () => {
+    if (playlist.length === 0) return;
+    
+    let nextIndex;
+    if (shuffle) {
+      nextIndex = Math.floor(Math.random() * playlist.length);
+    } else {
+      nextIndex = currentVideoIndex + 1;
+      if (nextIndex >= playlist.length) {
+        if (repeat) {
+          nextIndex = 0;
+        } else {
+          return; // End of playlist
+        }
+      }
+    }
+    
+    setCurrentVideoIndex(nextIndex);
+    navigate(`/video/${playlist[nextIndex].id}`);
+  };
+
+  const playPrevious = () => {
+    if (playlist.length === 0) return;
+    
+    let prevIndex;
+    if (shuffle) {
+      prevIndex = Math.floor(Math.random() * playlist.length);
+    } else {
+      prevIndex = currentVideoIndex - 1;
+      if (prevIndex < 0) {
+        if (repeat) {
+          prevIndex = playlist.length - 1;
+        } else {
+          return; // Beginning of playlist
+        }
+      }
+    }
+    
+    setCurrentVideoIndex(prevIndex);
+    navigate(`/video/${playlist[prevIndex].id}`);
+  };
+
+  const playVideoFromPlaylist = (index: number) => {
+    setCurrentVideoIndex(index);
+    navigate(`/video/${playlist[index].id}`);
+  };
+
+  const addToPlaylist = (video: any) => {
+    if (!playlist.find(v => v.id === video.id)) {
+      setPlaylist([...playlist, video]);
+    }
+  };
+
+  const removeFromPlaylist = (index: number) => {
+    const newPlaylist = playlist.filter((_, i) => i !== index);
+    setPlaylist(newPlaylist);
+    
+    if (index < currentVideoIndex) {
+      setCurrentVideoIndex(currentVideoIndex - 1);
+    } else if (index === currentVideoIndex && newPlaylist.length > 0) {
+      // If current video is removed, play next or previous
+      const newIndex = Math.min(currentVideoIndex, newPlaylist.length - 1);
+      setCurrentVideoIndex(newIndex);
+      navigate(`/video/${newPlaylist[newIndex].id}`);
+    }
+  };
+
+  // Auto-play next video when current ends
+  const handleVideoEnded = () => {
+    if (autoplay && playlist.length > 1) {
+      playNext();
+    }
+  };
+
   // Format time
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
@@ -367,6 +496,7 @@ const VideoPlayer: React.FC = () => {
                   onLoadedMetadata={handleLoadedMetadata}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
+                  onEnded={handleVideoEnded}
                   onClick={() => isPlaying ? handlePause() : handlePlay()}
                 />
 
@@ -485,6 +615,16 @@ const VideoPlayer: React.FC = () => {
 
                   {/* Control Buttons */}
                   <Stack direction="row" alignItems="center" spacing={1}>
+                    <Tooltip title="Previous">
+                      <IconButton
+                        onClick={playPrevious}
+                        sx={{ color: 'white' }}
+                        disabled={playlist.length <= 1}
+                      >
+                        <SkipPreviousIcon />
+                      </IconButton>
+                    </Tooltip>
+
                     <IconButton
                       onClick={() => isPlaying ? handlePause() : handlePlay()}
                       sx={{ color: 'white' }}
@@ -492,11 +632,57 @@ const VideoPlayer: React.FC = () => {
                       {isPlaying ? <PauseIcon /> : <PlayIcon />}
                     </IconButton>
 
+                    <Tooltip title="Next">
+                      <IconButton
+                        onClick={playNext}
+                        sx={{ color: 'white' }}
+                        disabled={playlist.length <= 1}
+                      >
+                        <SkipNextIcon />
+                      </IconButton>
+                    </Tooltip>
+
                     <Typography variant="body2" sx={{ color: 'white', minWidth: 100 }}>
                       {formatTime(currentTime)} / {formatTime(duration)}
                     </Typography>
 
                     <Box sx={{ flexGrow: 1 }} />
+
+                    <Tooltip title="Shuffle">
+                      <IconButton
+                        onClick={() => setShuffle(!shuffle)}
+                        sx={{ 
+                          color: shuffle ? 'primary.main' : 'white',
+                          opacity: shuffle ? 1 : 0.7
+                        }}
+                      >
+                        <ShuffleIcon />
+                      </IconButton>
+                    </Tooltip>
+
+                    <Tooltip title="Repeat">
+                      <IconButton
+                        onClick={() => setRepeat(!repeat)}
+                        sx={{ 
+                          color: repeat ? 'primary.main' : 'white',
+                          opacity: repeat ? 1 : 0.7
+                        }}
+                      >
+                        <RepeatIcon />
+                      </IconButton>
+                    </Tooltip>
+
+                    <Tooltip title="Playlist">
+                      <IconButton
+                        onClick={() => setShowPlaylist(!showPlaylist)}
+                        sx={{ 
+                          color: showPlaylist ? 'primary.main' : 'white',
+                          opacity: showPlaylist ? 1 : 0.7
+                        }}
+                      >
+                        <PlaylistPlayIcon />
+                      </IconButton>
+                    </Tooltip>
 
                     <IconButton
                       onClick={toggleMute}
@@ -573,10 +759,123 @@ const VideoPlayer: React.FC = () => {
             </Paper>
           </Box>
           
-          {/* Comments Section */}
+          {/* Playlist/Comments Section */}
           {!isFullWidth && (
             <Box sx={{ width: { xs: '100%', lg: '400px' }, flexShrink: 0 }}>
-              <CommentSection videoId={parseInt(id || '0')} currentTime={currentTime} />
+              {showPlaylist ? (
+                <Paper elevation={0} sx={{ height: 'fit-content' }}>
+                  <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      Playlist ({playlist.length} videos)
+                    </Typography>
+                  </Box>
+                  <List sx={{ maxHeight: '600px', overflow: 'auto' }}>
+                    {playlist.map((video, index) => (
+                      <ListItem
+                        key={video.id}
+                        onClick={() => playVideoFromPlaylist(index)}
+                        sx={{
+                          backgroundColor: index === currentVideoIndex ? 'action.selected' : 'transparent',
+                          cursor: 'pointer',
+                          '&:hover': {
+                            backgroundColor: 'action.hover',
+                          },
+                        }}
+                      >
+                        <ListItemAvatar>
+                          <Avatar
+                            variant="rounded"
+                            sx={{ width: 60, height: 40 }}
+                            src={`/api/videos/${video.id}/thumbnail`}
+                          >
+                            {index + 1}
+                          </Avatar>
+                        </ListItemAvatar>
+                        <ListItemText
+                          primary={
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontWeight: index === currentVideoIndex ? 600 : 400,
+                                color: index === currentVideoIndex ? 'primary.main' : 'text.primary',
+                              }}
+                            >
+                              {video.title}
+                            </Typography>
+                          }
+                          secondary={
+                            <Typography variant="caption" color="text.secondary">
+                              {video.view_count?.toLocaleString() || 0} views
+                            </Typography>
+                          }
+                        />
+                        {index !== currentVideoIndex && (
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeFromPlaylist(index);
+                            }}
+                            sx={{ opacity: 0.7 }}
+                          >
+                            ×
+                          </IconButton>
+                        )}
+                      </ListItem>
+                    ))}
+                  </List>
+                  
+                  {/* Add suggested videos section */}
+                  {suggestedVideos.length > 0 && (
+                    <>
+                      <Divider />
+                      <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                          Suggested Videos
+                        </Typography>
+                      </Box>
+                      <List sx={{ maxHeight: '400px', overflow: 'auto' }}>
+                        {suggestedVideos.slice(0, 5).map((video) => (
+                          <ListItem
+                            key={video.id}
+                            onClick={() => addToPlaylist(video)}
+                            sx={{
+                              cursor: 'pointer',
+                              '&:hover': {
+                                backgroundColor: 'action.hover',
+                              },
+                            }}
+                          >
+                            <ListItemAvatar>
+                              <Avatar
+                                variant="rounded"
+                                sx={{ width: 60, height: 40 }}
+                                src={`/api/videos/${video.id}/thumbnail`}
+                              >
+                                +
+                              </Avatar>
+                            </ListItemAvatar>
+                            <ListItemText
+                              primary={
+                                <Typography variant="body2">
+                                  {video.title}
+                                </Typography>
+                              }
+                              secondary={
+                                <Typography variant="caption" color="text.secondary">
+                                  {video.view_count?.toLocaleString() || 0} views
+                                </Typography>
+                              }
+                            />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </>
+                  )}
+                </Paper>
+              ) : (
+                <CommentSection videoId={parseInt(id || '0')} currentTime={currentTime} />
+              )}
             </Box>
           )}
         </Box>
