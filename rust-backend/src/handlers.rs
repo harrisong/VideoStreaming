@@ -8,6 +8,7 @@ use std::env;
 
 use crate::websocket::broadcast_comment;
 use crate::models::{RegisterRequest, LoginRequest, CommentRequest, Comment, Video, User, Claims, UserSettingsRequest, Category};
+use crate::job_queue::DurationExtractionJob;
 use crate::AppState;
 
 #[post("/api/auth/register")]
@@ -142,7 +143,35 @@ async fn get_videos(state: web::Data<Arc<Mutex<AppState>>>) -> actix_web::HttpRe
         .await;
 
     match result {
-        Ok(videos) => actix_web::HttpResponse::Ok().json(videos),
+        Ok(videos) => {
+            // Check for videos without duration and queue them for processing
+            if let Some(ref job_queue) = state.job_queue {
+                info!("Job queue is available, checking videos for duration extraction");
+                let bucket = std::env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
+                
+                for video in &videos {
+                    if video.duration.is_none() {
+                        info!("Video {} has no duration, enqueueing job", video.id);
+                        let job = DurationExtractionJob {
+                            video_id: video.id,
+                            s3_key: video.s3_key.clone(),
+                            bucket: bucket.clone(),
+                        };
+                        
+                        match job_queue.enqueue_duration_extraction(job).await {
+                            Ok(_) => info!("Successfully enqueued duration extraction job for video {}", video.id),
+                            Err(e) => error!("Failed to enqueue duration extraction job for video {}: {:?}", video.id, e),
+                        }
+                    } else {
+                        info!("Video {} already has duration: {:?}", video.id, video.duration);
+                    }
+                }
+            } else {
+                info!("Job queue is not available");
+            }
+            
+            actix_web::HttpResponse::Ok().json(videos)
+        }
         Err(e) => {
             error!("Error fetching videos: {:?}", e);
             actix_web::HttpResponse::InternalServerError().json(json!({
@@ -651,6 +680,7 @@ async fn get_videos_by_category(
         }
     }
 }
+
 
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(register)

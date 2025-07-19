@@ -15,11 +15,34 @@ pub struct WatchPartyMessage {
     pub source_id: String,
 }
 
-// Initialize the Redis client
+// Initialize the Redis client with retry logic
 pub fn init_redis_client() -> RedisResult<Client> {
     let redis_url = env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
     info!("Connecting to Redis at {}", redis_url);
-    Client::open(redis_url)
+    
+    // Try to open the connection
+    let client = Client::open(redis_url.clone())?;
+    
+    // Test the connection by pinging Redis
+    match client.get_connection() {
+        Ok(mut conn) => {
+            match redis::cmd("PING").query::<String>(&mut conn) {
+                Ok(result) => {
+                    info!("Redis connection test successful: {}", result);
+                },
+                Err(e) => {
+                    error!("Redis connection test failed: {:?}", e);
+                    // We still return the client even if ping fails, as it might be a temporary issue
+                }
+            }
+        },
+        Err(e) => {
+            error!("Failed to get Redis connection: {:?}", e);
+            // We still return the client even if connection fails, as it might be a temporary issue
+        }
+    }
+    
+    Ok(client)
 }
 
 // Publish a message to a Redis channel

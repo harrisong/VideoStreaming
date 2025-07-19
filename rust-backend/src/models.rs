@@ -37,6 +37,7 @@ pub struct Video {
     pub tags: Option<Vec<String>>,
     pub view_count: Option<i32>,
     pub category_id: Option<i32>,
+    pub duration: Option<i32>, // Duration in seconds
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]

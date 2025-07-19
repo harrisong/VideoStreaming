@@ -8,13 +8,7 @@ use log::{info, error};
 use env_logger;
 
 // Import from the crate root
-use video_streaming_backend::AppState;
-
-mod models;
-mod handlers;
-mod websocket;
-mod services;
-mod redis_service;
+use video_streaming_backend::{AppState, job_queue, handlers, websocket, services};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -26,15 +20,57 @@ async fn main() -> std::io::Result<()> {
     // Ensure the videos bucket exists
     services::ensure_bucket_exists(&s3_client).await;
     
-    // Initialize Redis client
-    let redis_client = match video_streaming_backend::redis_service::init_redis_client() {
+    // Initialize Redis client and job queue with retry logic
+    let (redis_client, job_queue) = match video_streaming_backend::redis_service::init_redis_client() {
         Ok(client) => {
             info!("Successfully connected to Redis");
-            Some(client)
+            let job_queue = job_queue::JobQueue::new(client.clone(), db_pool.clone(), s3_client.clone());
+            (Some(client), Some(job_queue))
         },
         Err(e) => {
-            error!("Failed to connect to Redis: {:?}", e);
-            None
+            error!("Failed to connect to Redis: {:?}. Will retry in background.", e);
+            
+            // Start a background task to retry Redis connection
+            let db_pool_clone = db_pool.clone();
+            let s3_client_clone = s3_client.clone();
+            tokio::spawn(async move {
+                let mut retry_count = 0;
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    retry_count += 1;
+                    info!("Retrying Redis connection (attempt {})", retry_count);
+                    
+                    match video_streaming_backend::redis_service::init_redis_client() {
+                        Ok(client) => {
+                            info!("Successfully connected to Redis after {} retries", retry_count);
+                            
+                            // Create job queue
+                            let job_queue = job_queue::JobQueue::new(client.clone(), db_pool_clone.clone(), s3_client_clone.clone());
+                            
+                            // Queue existing videos without duration
+                            if let Err(e) = job_queue.queue_missing_durations().await {
+                                error!("Failed to queue missing durations: {:?}", e);
+                            }
+                            
+                            // Start background job processor
+                            let job_queue_processor = job_queue.clone();
+                            tokio::spawn(async move {
+                                job_queue_processor.process_duration_extraction_jobs().await;
+                            });
+                            
+                            info!("Started background job processor for duration extraction after Redis reconnection");
+                            break;
+                        },
+                        Err(e) => {
+                            error!("Failed to connect to Redis (retry {}): {:?}", retry_count, e);
+                            // Continue retrying
+                        }
+                    }
+                }
+            });
+            
+            // Return None for now, but the background task will initialize Redis later
+            (None, None)
         }
     };
     
@@ -42,9 +78,30 @@ async fn main() -> std::io::Result<()> {
         db_pool,
         s3_client,
         redis_client,
+        job_queue,
         video_clients: std::sync::Mutex::new(HashMap::new()),
         watchparty_clients: std::sync::Mutex::new(HashMap::new()),
     }));
+
+    // Start background job processor if Redis is available
+    if let Some(ref job_queue_ref) = app_state.lock().await.job_queue {
+        let job_queue_clone = job_queue_ref.clone();
+        
+        // Queue existing videos without duration
+        tokio::spawn(async move {
+            if let Err(e) = job_queue_clone.queue_missing_durations().await {
+                error!("Failed to queue missing durations: {:?}", e);
+            }
+        });
+        
+        // Start background job processor
+        let job_queue_processor = job_queue_ref.clone();
+        tokio::spawn(async move {
+            job_queue_processor.process_duration_extraction_jobs().await;
+        });
+        
+        info!("Started background job processor for duration extraction");
+    }
 
     let app_state_clone = app_state.clone();
 

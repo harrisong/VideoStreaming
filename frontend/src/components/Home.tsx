@@ -34,6 +34,21 @@ const Home: React.FC = () => {
   const navigate = useNavigate();
   const { isSearchFocused } = useSearchFocus();
 
+  // Helper function to format duration
+  const formatDuration = (seconds: number | null | undefined): string => {
+    if (!seconds || seconds <= 0) return '0:00';
+    
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    } else {
+      return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+  };
+
   useEffect(() => {
     const fetchVideos = async () => {
       try {
@@ -221,113 +236,149 @@ const Home: React.FC = () => {
                   sm: 'repeat(2, 1fr)',
                   md: 'repeat(3, 1fr)',
                   lg: 'repeat(4, 1fr)',
+                  xl: 'repeat(5, 1fr)',
                 },
-                gap: 3 
+                gap: 2 
               }}>
                 {videos.map((video) => (
-                  <Card 
+                  <Box 
                     key={video.id}
                     sx={{ 
-                      height: '100%', 
-                      display: 'flex', 
-                      flexDirection: 'column',
-                      transition: 'all 0.3s ease-in-out',
+                      cursor: 'pointer',
+                      transition: 'transform 0.2s ease-in-out',
                       '&:hover': {
-                        transform: 'translateY(-8px) scale(1.02)',
-                        boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
-                        backdropFilter: 'blur(15px)',
+                        transform: 'scale(1.05)',
                       },
                     }}
+                    onClick={() => handleVideoClick(video.id)}
                   >
-                    <CardMedia
-                      component="img"
-                      height="200"
-                      image={video.thumbnail_url ? buildApiUrl(API_CONFIG.ENDPOINTS.THUMBNAILS, video.thumbnail_url.split('/').pop()) : ''}
-                      alt={video.title}
-                      sx={{ 
-                        objectFit: 'cover',
-                        cursor: 'pointer',
-                      }}
-                      onClick={() => handleVideoClick(video.id)}
-                    />
-                    <CardContent sx={{ flexGrow: 1 }}>
-                      <Typography 
-                        variant="h6" 
-                        component="h3" 
-                        gutterBottom
-                        sx={{ 
-                          fontWeight: 'bold',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
+                    {/* Thumbnail Container */}
+                    <Box sx={{ 
+                      position: 'relative',
+                      aspectRatio: '16/9',
+                      borderRadius: 2,
+                      overflow: 'hidden',
+                      mb: 1,
+                      backgroundColor: '#f5f5f5',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <img
+                        src={video.thumbnail_url ? buildApiUrl(API_CONFIG.ENDPOINTS.THUMBNAILS, video.thumbnail_url.split('/').pop()) : ''}
+                        alt={video.title}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
                         }}
-                      >
-                        {video.title}
-                      </Typography>
-                      <Typography 
-                        variant="body2" 
-                        color="text.secondary" 
-                        sx={{ 
-                          mb: 1,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 3,
-                          WebkitBoxOrient: 'vertical',
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none'; // Hide the broken image
+                          target.alt = ''; // Clear alt text
+                          
+                          // Create fallback content if it doesn't exist
+                          const container = target.parentElement;
+                          if (container && !container.querySelector('.fallback-content')) {
+                            const fallback = document.createElement('div');
+                            fallback.className = 'fallback-content';
+                            fallback.style.cssText = `
+                              position: absolute;
+                              top: 0;
+                              left: 0;
+                              right: 0;
+                              bottom: 0;
+                              display: flex;
+                              align-items: center;
+                              justify-content: center;
+                              background-color: #f5f5f5;
+                              color: #9e9e9e;
+                              font-size: 48px;
+                              z-index: 1;
+                            `;
+                            fallback.innerHTML = '▶';
+                            container.appendChild(fallback);
+                          }
                         }}
-                      >
-                        {video.description}
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                        <VisibilityIcon sx={{ fontSize: 16, mr: 0.5 }} />
-                        <Typography variant="caption" color="text.secondary">
-                          {video.view_count} views
-                        </Typography>
+                      />
+                      
+                      {/* Play Button Overlay */}
+                      <Box sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(0, 0, 0, 0)',
+                        transition: 'background-color 0.2s ease-in-out',
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                          '& .play-icon': {
+                            opacity: 1,
+                            transform: 'scale(1)',
+                          },
+                        },
+                      }}>
+                        <PlayArrowIcon 
+                          className="play-icon"
+                          sx={{
+                            fontSize: 48,
+                            color: 'white',
+                            opacity: 0,
+                            transform: 'scale(0.8)',
+                            transition: 'all 0.2s ease-in-out',
+                            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))',
+                          }}
+                        />
                       </Box>
-                      {video.tags && video.tags.length > 0 && (
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
-                          {video.tags.slice(0, 3).map((tag: string) => (
-                            <Chip
-                              key={tag}
-                              label={tag}
-                              size="small"
-                              variant="outlined"
-                              onClick={() => handleTagClick(tag)}
-                              sx={{ 
-                                fontSize: '0.75rem',
-                                cursor: 'pointer',
-                                '&:hover': {
-                                  backgroundColor: 'primary.main',
-                                  color: 'primary.contrastText',
-                                },
-                              }}
-                            />
-                          ))}
-                          {video.tags.length > 3 && (
-                            <Chip
-                              label={`+${video.tags.length - 3}`}
-                              size="small"
-                              variant="outlined"
-                              sx={{ fontSize: '0.75rem' }}
-                            />
-                          )}
-                        </Box>
-                      )}
-                    </CardContent>
-                    <CardActions>
-                      <Button
-                        fullWidth
-                        variant="contained"
-                        startIcon={<PlayArrowIcon />}
-                        onClick={() => handleVideoClick(video.id)}
-                        sx={{ m: 1 }}
-                      >
-                        Watch Now
-                      </Button>
-                    </CardActions>
-                  </Card>
+                      
+                      {/* Duration Badge */}
+                      <Box sx={{
+                        position: 'absolute',
+                        bottom: 8,
+                        right: 8,
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        color: 'white',
+                        px: 1,
+                        py: 0.25,
+                        borderRadius: 1,
+                        fontSize: '0.75rem',
+                        fontWeight: 500,
+                        zIndex: 2,
+                      }}>
+                        {formatDuration(video.duration)}
+                      </Box>
+                    </Box>
+                    
+                    {/* Video Title */}
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        fontWeight: 500,
+                        lineHeight: 1.3,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        mb: 0.5,
+                      }}
+                    >
+                      {video.title}
+                    </Typography>
+                    
+                    {/* View Count */}
+                    <Typography 
+                      variant="caption" 
+                      color="text.secondary"
+                      sx={{ fontSize: '0.75rem' }}
+                    >
+                      {video.view_count?.toLocaleString() || 0} views
+                    </Typography>
+                  </Box>
                 ))}
               </Box>
             )}
