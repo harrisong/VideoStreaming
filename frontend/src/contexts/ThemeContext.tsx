@@ -12,6 +12,7 @@ interface Theme {
   textSecondary: string;
   plyrColor: string;
   isCustom?: boolean;
+  isDark?: boolean;
 }
 
 const predefinedThemes: { [key: string]: Theme } = {
@@ -24,7 +25,8 @@ const predefinedThemes: { [key: string]: Theme } = {
     surface: '#212121',
     text: '#ffffff',
     textSecondary: '#aaaaaa',
-    plyrColor: '#ff0000'
+    plyrColor: '#ff0000',
+    isDark: true
   },
   pornhub: {
     name: 'Pornhub',
@@ -35,7 +37,8 @@ const predefinedThemes: { [key: string]: Theme } = {
     surface: '#1a1a1a',
     text: '#ffffff',
     textSecondary: '#cccccc',
-    plyrColor: '#ff9000'
+    plyrColor: '#ff9000',
+    isDark: true
   },
   vimeo: {
     name: 'Vimeo',
@@ -46,10 +49,11 @@ const predefinedThemes: { [key: string]: Theme } = {
     surface: '#2d2d2d',
     text: '#ffffff',
     textSecondary: '#b3b3b3',
-    plyrColor: '#1ab7ea'
+    plyrColor: '#1ab7ea',
+    isDark: true
   },
   default: {
-    name: 'Default',
+    name: 'Default Light',
     primary: '#4f46e5',
     secondary: '#3730a3',
     accent: '#6366f1',
@@ -57,7 +61,32 @@ const predefinedThemes: { [key: string]: Theme } = {
     surface: '#ffffff',
     text: '#111827',
     textSecondary: '#6b7280',
-    plyrColor: '#4f46e5'
+    plyrColor: '#4f46e5',
+    isDark: false
+  },
+  defaultDark: {
+    name: 'Default Dark',
+    primary: '#6366f1',
+    secondary: '#4f46e5',
+    accent: '#8b5cf6',
+    background: '#0f0f23',
+    surface: '#1e1e2e',
+    text: '#ffffff',
+    textSecondary: '#a1a1aa',
+    plyrColor: '#6366f1',
+    isDark: true
+  },
+  system: {
+    name: 'System',
+    primary: '#4f46e5',
+    secondary: '#3730a3',
+    accent: '#6366f1',
+    background: '#f9fafb',
+    surface: '#ffffff',
+    text: '#111827',
+    textSecondary: '#6b7280',
+    plyrColor: '#4f46e5',
+    isDark: false
   }
 };
 
@@ -65,6 +94,7 @@ interface ThemeContextType {
   currentTheme: Theme;
   applyTheme: (theme: Theme | { name: string; isCustom?: boolean }) => void;
   loadUserTheme: () => Promise<void>;
+  predefinedThemes: { [key: string]: Theme };
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -83,10 +113,32 @@ interface ThemeProviderProps {
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   const [currentTheme, setCurrentTheme] = useState<Theme>(predefinedThemes.default);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(false);
 
-  const applyTheme = (theme: Theme | { name: string; isCustom?: boolean }) => {
-    const themeToApply = 'isCustom' in theme && theme.isCustom ? theme as Theme : predefinedThemes[theme.name] || predefinedThemes.default;
-    
+  // Detect system theme preference
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    setSystemPrefersDark(mediaQuery.matches);
+
+    const handleChange = (e: MediaQueryListEvent) => {
+      setSystemPrefersDark(e.matches);
+      // If user is using system theme, update automatically
+      const savedTheme = localStorage.getItem('selectedTheme');
+      if (savedTheme === 'system') {
+        applySystemTheme();
+      }
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  const applySystemTheme = () => {
+    const systemTheme = systemPrefersDark ? predefinedThemes.defaultDark : predefinedThemes.default;
+    applyThemeInternal(systemTheme);
+  };
+
+  const applyThemeInternal = (themeToApply: Theme) => {
     const root = document.documentElement;
     root.style.setProperty('--theme-primary', themeToApply.primary);
     root.style.setProperty('--theme-secondary', themeToApply.secondary);
@@ -104,14 +156,51 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     setCurrentTheme(themeToApply);
   };
 
+  const applyTheme = (theme: Theme | { name: string; isCustom?: boolean }) => {
+    let themeToApply: Theme;
+    
+    if ('isCustom' in theme && theme.isCustom) {
+      themeToApply = theme as Theme;
+    } else {
+      const themeName = theme.name;
+      if (themeName === 'system') {
+        themeToApply = systemPrefersDark ? predefinedThemes.defaultDark : predefinedThemes.default;
+      } else {
+        themeToApply = predefinedThemes[themeName] || predefinedThemes.default;
+      }
+    }
+
+    applyThemeInternal(themeToApply);
+
+    // Save theme preference to localStorage for non-logged-in users
+    const token = localStorage.getItem('token');
+    if (!token) {
+      localStorage.setItem('selectedTheme', theme.name);
+    }
+  };
+
   const loadUserTheme = async () => {
     try {
       const token = localStorage.getItem('token');
+      
       if (!token) {
-        applyTheme(predefinedThemes.default);
+        // For non-logged-in users, load from localStorage or use system default
+        const savedTheme = localStorage.getItem('selectedTheme');
+        if (savedTheme) {
+          if (savedTheme === 'system') {
+            applySystemTheme();
+          } else {
+            applyTheme({ name: savedTheme });
+          }
+        } else {
+          // Default to system theme for new users
+          localStorage.setItem('selectedTheme', 'system');
+          applySystemTheme();
+        }
         return;
       }
 
+      // For logged-in users, load from server
       const response = await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.USER_SETTINGS), {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -124,20 +213,21 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
         if (theme) {
           applyTheme(theme);
         } else {
-          applyTheme(predefinedThemes.default);
+          // Default to system theme if no user preference
+          applySystemTheme();
         }
       } else {
-        applyTheme(predefinedThemes.default);
+        applySystemTheme();
       }
     } catch (error) {
       console.error('Error loading user theme:', error);
-      applyTheme(predefinedThemes.default);
+      applySystemTheme();
     }
   };
 
   useEffect(() => {
     loadUserTheme();
-  }, []);
+  }, [systemPrefersDark]);
 
   // Listen for login/logout events to reload theme
   useEffect(() => {
@@ -152,7 +242,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   const value: ThemeContextType = {
     currentTheme,
     applyTheme,
-    loadUserTheme
+    loadUserTheme,
+    predefinedThemes
   };
 
   return (
