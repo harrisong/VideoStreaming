@@ -7,6 +7,7 @@ import Home from './components/Home';
 import VideoPlayer from './components/VideoPlayer';
 import UserList from './components/UserList';
 import TagVideos from './components/TagVideos';
+import Categories from './components/Categories';
 
 function App() {
   // Authentication state can be used for protected routes if needed
@@ -30,6 +31,14 @@ function App() {
         <Route 
           path="/tag/:tag" 
           element={<TagVideos />} 
+        />
+        <Route 
+          path="/categories" 
+          element={<Categories />} 
+        />
+        <Route 
+          path="/categories/:categoryId" 
+          element={<Categories />} 
         />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>

@@ -36,6 +36,15 @@ pub struct Video {
     pub upload_date: Option<NaiveDateTime>,
     pub tags: Option<Vec<String>>,
     pub view_count: Option<i32>,
+    pub category_id: Option<i32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct Category {
+    pub id: i32,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow, Clone)]

@@ -123,6 +123,20 @@
   border: 1px solid var(--theme-text-secondary);
 }
 
+/* Theme-aware category cards */
+.category-card-themed {
+  background-color: var(--theme-surface);
+  color: var(--theme-text);
+  border: 1px solid var(--theme-text-secondary);
+  transition: all 0.2s ease;
+}
+
+.category-card-themed:hover {
+  background-color: var(--theme-accent);
+  color: white;
+  transform: translateY(-2px);
+}
+
 /* Ensure body uses theme colors */
 body {
   background-color: var(--theme-background);

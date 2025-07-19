@@ -77,6 +77,22 @@ const Navbar: React.FC<{ onWatchPartyToggle?: () => void; isWatchParty?: boolean
         )}
 
         <div className="flex gap-2 items-center">
+          {/* Categories Button */}
+          <button
+            onClick={() => navigate('/categories')}
+            className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md"
+            style={{
+              backgroundColor: 'var(--theme-accent)',
+              color: 'var(--theme-text)'
+            }}
+            title="Browse Categories"
+          >
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14-7H5m14 14H5" />
+            </svg>
+            Categories
+          </button>
+          
           {/* Theme Picker Button */}
           <button
             onClick={() => setIsThemePickerOpen(true)}

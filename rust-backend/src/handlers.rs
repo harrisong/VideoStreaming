@@ -7,7 +7,7 @@ use jsonwebtoken::{decode, DecodingKey, Validation};
 use std::env;
 
 use crate::websocket::broadcast_comment;
-use crate::models::{RegisterRequest, LoginRequest, CommentRequest, Comment, Video, User, Claims, UserSettingsRequest};
+use crate::models::{RegisterRequest, LoginRequest, CommentRequest, Comment, Video, User, Claims, UserSettingsRequest, Category};
 use crate::AppState;
 
 #[post("/api/auth/register")]
@@ -611,6 +611,47 @@ async fn update_user_settings(
     }
 }
 
+#[get("/api/categories")]
+async fn get_categories(state: web::Data<Arc<Mutex<AppState>>>) -> actix_web::HttpResponse {
+    let state = state.lock().await;
+    let result = sqlx::query_as::<_, Category>("SELECT * FROM categories ORDER BY name ASC")
+        .fetch_all(&state.db_pool)
+        .await;
+
+    match result {
+        Ok(categories) => actix_web::HttpResponse::Ok().json(categories),
+        Err(e) => {
+            error!("Error fetching categories: {:?}", e);
+            actix_web::HttpResponse::InternalServerError().json(json!({
+                "error": "Internal server error"
+            }))
+        }
+    }
+}
+
+#[get("/api/videos/category/{category_id}")]
+async fn get_videos_by_category(
+    path: web::Path<i32>,
+    state: web::Data<Arc<Mutex<AppState>>>,
+) -> actix_web::HttpResponse {
+    let state = state.lock().await;
+    let category_id = path.into_inner();
+    let result = sqlx::query_as::<_, Video>("SELECT * FROM videos WHERE category_id = $1 ORDER BY upload_date DESC")
+        .bind(category_id)
+        .fetch_all(&state.db_pool)
+        .await;
+
+    match result {
+        Ok(videos) => actix_web::HttpResponse::Ok().json(videos),
+        Err(e) => {
+            error!("Error fetching videos by category: {:?}", e);
+            actix_web::HttpResponse::InternalServerError().json(json!({
+                "error": "Internal server error"
+            }))
+        }
+    }
+}
+
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(register)
        .service(login)
@@ -628,5 +669,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
        .service(control_watch_party)
        .service(get_thumbnail)
        .service(get_user_settings)
-       .service(update_user_settings);
+       .service(update_user_settings)
+       .service(get_categories)
+       .service(get_videos_by_category);
 }

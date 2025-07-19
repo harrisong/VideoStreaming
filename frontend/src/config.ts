@@ -44,6 +44,10 @@ export const API_CONFIG = {
     VIDEO_BY_ID: '/api/videos',
     VIDEO_STREAM: '/api/videos',
     VIDEO_BY_TAG: '/api/videos/tag',
+    VIDEO_BY_CATEGORY: '/api/videos/category',
+    
+    // Category endpoints
+    CATEGORIES: '/api/categories',
     
     // Thumbnail endpoint
     THUMBNAILS: '/api/thumbnails',
