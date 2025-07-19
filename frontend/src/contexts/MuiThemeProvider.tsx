@@ -69,7 +69,10 @@ export const MuiThemeProvider: React.FC<MuiThemeProviderProps> = ({ children }) 
       MuiAppBar: {
         styleOverrides: {
           root: {
-            backgroundColor: currentTheme.surface,
+            backgroundColor: `${currentTheme.surface}E6`, // 90% opacity
+            backdropFilter: 'blur(15px)',
+            border: `1px solid ${currentTheme.text}20`,
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
             color: currentTheme.text,
           },
         },
@@ -77,16 +80,31 @@ export const MuiThemeProvider: React.FC<MuiThemeProviderProps> = ({ children }) 
       MuiCard: {
         styleOverrides: {
           root: {
-            backgroundColor: currentTheme.surface,
+            backgroundColor: `${currentTheme.surface}CC`, // 80% opacity
+            backdropFilter: 'blur(10px)',
+            border: `1px solid ${currentTheme.text}20`, // 12% opacity border
             color: currentTheme.text,
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
           },
         },
       },
       MuiPaper: {
         styleOverrides: {
           root: {
-            backgroundColor: currentTheme.surface,
+            backgroundColor: `${currentTheme.surface}CC`, // 80% opacity
+            backdropFilter: 'blur(10px)',
+            border: `1px solid ${currentTheme.text}20`, // 12% opacity border
             color: currentTheme.text,
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+          },
+        },
+      },
+      MuiDialog: {
+        styleOverrides: {
+          paper: {
+            backgroundColor: `${currentTheme.surface}F0`, // 94% opacity
+            backdropFilter: 'blur(20px)',
+            border: `1px solid ${currentTheme.text}30`, // 18% opacity border
           },
         },
       },

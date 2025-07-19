@@ -218,10 +218,11 @@ const Home: React.FC = () => {
                       height: '100%', 
                       display: 'flex', 
                       flexDirection: 'column',
-                      transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                      transition: 'all 0.3s ease-in-out',
                       '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: 4,
+                        transform: 'translateY(-8px) scale(1.02)',
+                        boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
+                        backdropFilter: 'blur(15px)',
                       },
                     }}
                   >
