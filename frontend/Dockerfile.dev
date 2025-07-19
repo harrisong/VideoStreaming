@@ -1,0 +1,23 @@
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy package.json and package-lock.json for better layer caching
+COPY package*.json ./
+
+# Install all dependencies (including dev dependencies)
+RUN npm ci --silent
+
+# Copy source code (excluding node_modules via .dockerignore)
+COPY src ./src
+COPY public ./public
+COPY tsconfig.json ./
+COPY tailwind.config.js ./
+COPY postcss.config.js ./
+
+# Expose port 3000 (React dev server default)
+EXPOSE 3000
+
+# Start the React development server
+CMD ["npm", "start"]

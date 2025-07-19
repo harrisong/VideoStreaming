@@ -1,15 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Button,
+  IconButton,
+  Menu,
+  MenuItem,
+  TextField,
+  InputAdornment,
+  Box,
+  Avatar,
+  Divider,
+  ListItemIcon,
+  ListItemText,
+  Container,
+} from '@mui/material';
+import {
+  Search as SearchIcon,
+  Category as CategoryIcon,
+  Palette as PaletteIcon,
+  AccountCircle as AccountCircleIcon,
+  Logout as LogoutIcon,
+  Login as LoginIcon,
+  Group as GroupIcon,
+} from '@mui/icons-material';
 import { buildApiUrl, API_CONFIG } from '../config';
 import ThemePicker from './ThemePicker';
 import Logo from './Logo';
 
-const Navbar: React.FC<{ onWatchPartyToggle?: () => void; isWatchParty?: boolean; onSearch?: (query: string) => void }> = ({ onWatchPartyToggle, isWatchParty, onSearch }) => {
+const Navbar: React.FC<{ 
+  onWatchPartyToggle?: () => void; 
+  isWatchParty?: boolean; 
+  onSearch?: (query: string) => void 
+}> = ({ onWatchPartyToggle, isWatchParty, onSearch }) => {
   const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
+
+  const isMenuOpen = Boolean(anchorEl);
 
   useEffect(() => {
     // Load user data from localStorage if token exists
@@ -43,154 +75,234 @@ const Navbar: React.FC<{ onWatchPartyToggle?: () => void; isWatchParty?: boolean
     }
   };
 
-  return (
-    <header className="navbar-themed shadow">
-      <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-        <button
-          onClick={() => navigate('/home')}
-          className="bg-transparent border-none cursor-pointer p-1 hover:opacity-80 transition-opacity"
-        >
-          <Logo />
-        </button>
-        
-        {/* Search Bar */}
-        {onSearch && (
-          <form onSubmit={handleSearch} className="flex-1 max-w-lg mx-8">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search videos..."
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              />
-              <button
-                type="submit"
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </button>
-            </div>
-          </form>
-        )}
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
 
-        <div className="flex gap-2 items-center">
-          {/* Categories Button */}
-          <button
-            onClick={() => navigate('/categories')}
-            className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md"
-            style={{
-              backgroundColor: 'var(--theme-accent)',
-              color: 'var(--theme-text)'
-            }}
-            title="Browse Categories"
-          >
-            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14-7H5m14 14H5" />
-            </svg>
-            Categories
-          </button>
-          
-          {/* Theme Picker Button */}
-          <button
-            onClick={() => setIsThemePickerOpen(true)}
-            className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md"
-            style={{
-              backgroundColor: 'var(--theme-accent)',
-              color: 'var(--theme-text)'
-            }}
-            title="Theme Settings"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5H9a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2z" />
-            </svg>
-          </button>
-          
-          {onWatchPartyToggle && (
-            <button
-              onClick={onWatchPartyToggle}
-              className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white"
-              style={{
-                backgroundColor: isWatchParty ? '#10b981' : 'var(--theme-primary)'
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.LOGOUT), {
+        method: 'POST',
+        credentials: 'include'
+      });
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      setUser(null);
+      navigate('/login');
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
+    handleMenuClose();
+  };
+
+  return (
+    <>
+      <AppBar position="static" elevation={1}>
+        <Container maxWidth="xl">
+          <Toolbar sx={{ justifyContent: 'space-between' }}>
+            {/* Logo */}
+            <IconButton
+              color="inherit"
+              onClick={() => navigate('/home')}
+              sx={{ 
+                p: 1,
+                borderRadius: 1,
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                },
+              }}
+              disableRipple={false}
+              TouchRippleProps={{
+                style: {
+                  borderRadius: '4px',
+                },
               }}
             >
-              {isWatchParty ? 'In Watch Party' : 'Start Watch Party'}
-            </button>
-          )}
-          <div className="relative">
+              <Logo />
+            </IconButton>
+
+            {/* Search Bar */}
+            {onSearch && (
+              <Box
+                component="form"
+                onSubmit={handleSearch}
+                sx={{ flexGrow: 1, maxWidth: 600, mx: 3 }}
+              >
+                <TextField
+                  fullWidth
+                  size="small"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search videos..."
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton type="submit" edge="end">
+                          <SearchIcon />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                      '& fieldset': {
+                        borderColor: 'rgba(255, 255, 255, 0.3)',
+                      },
+                      '&:hover fieldset': {
+                        borderColor: 'rgba(255, 255, 255, 0.5)',
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: 'primary.main',
+                      },
+                    },
+                    '& .MuiInputBase-input': {
+                      color: 'inherit',
+                      '&::placeholder': {
+                        color: 'rgba(255, 255, 255, 0.7)',
+                        opacity: 1,
+                      },
+                    },
+                  }}
+                />
+              </Box>
+            )}
+
+            {/* Action Buttons */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* Categories Button */}
+            <Button
+              color="inherit"
+              startIcon={<CategoryIcon />}
+              onClick={() => navigate('/categories')}
+              sx={{ display: { xs: 'none', sm: 'flex' } }}
+            >
+              Categories
+            </Button>
+
+            {/* Categories Icon for mobile */}
+            <IconButton
+              color="inherit"
+              onClick={() => navigate('/categories')}
+              sx={{ display: { xs: 'flex', sm: 'none' } }}
+              title="Categories"
+            >
+              <CategoryIcon />
+            </IconButton>
+
+            {/* Theme Picker Button */}
+            <IconButton
+              color="inherit"
+              onClick={() => setIsThemePickerOpen(true)}
+              title="Theme Settings"
+            >
+              <PaletteIcon />
+            </IconButton>
+
+            {/* Watch Party Button */}
+            {onWatchPartyToggle && (
+              <Button
+                variant={isWatchParty ? "contained" : "outlined"}
+                color={isWatchParty ? "success" : "primary"}
+                startIcon={<GroupIcon />}
+                onClick={onWatchPartyToggle}
+                sx={{ display: { xs: 'none', md: 'flex' } }}
+              >
+                {isWatchParty ? 'In Watch Party' : 'Start Watch Party'}
+              </Button>
+            )}
+
+            {/* User Menu */}
             {user ? (
               <>
-                <button
-                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white"
-                  style={{
-                    backgroundColor: 'var(--theme-secondary)'
-                  }}
+                <Button
+                  color="inherit"
+                  onClick={handleMenuOpen}
+                  startIcon={<Avatar sx={{ width: 24, height: 24 }}>{user.username[0].toUpperCase()}</Avatar>}
+                  sx={{ display: { xs: 'none', sm: 'flex' } }}
                 >
                   {user.username}
-                  <svg className="ml-2 -mr-1 w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-                {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg z-10" style={{
-                    backgroundColor: 'var(--theme-surface)',
-                    color: 'var(--theme-text)'
-                  }}>
-                    <div className="px-4 py-2 text-sm border-b" style={{
-                      borderColor: 'var(--theme-text-secondary)'
-                    }}>
-                      <p>Username: {user.username}</p>
-                      <p>Email: {user.email}</p>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        try {
-                          await fetch(buildApiUrl(API_CONFIG.ENDPOINTS.LOGOUT), {
-                            method: 'POST',
-                            credentials: 'include'
-                          });
-                          localStorage.removeItem('user');
-                          localStorage.removeItem('token');
-                          setUser(null);
-                          navigate('/login');
-                        } catch (error) {
-                          console.error('Error during logout:', error);
-                        }
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm hover:opacity-80"
-                      style={{
-                        color: 'var(--theme-text)'
-                      }}
-                    >
-                      Logout
-                    </button>
-                  </div>
-                )}
+                </Button>
+                <IconButton
+                  color="inherit"
+                  onClick={handleMenuOpen}
+                  sx={{ display: { xs: 'flex', sm: 'none' } }}
+                >
+                  <Avatar sx={{ width: 32, height: 32 }}>{user.username[0].toUpperCase()}</Avatar>
+                </IconButton>
               </>
             ) : (
-              <button
+              <Button
+                color="inherit"
+                startIcon={<LoginIcon />}
                 onClick={() => navigate('/login')}
-                className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white"
-                style={{
-                  backgroundColor: 'var(--theme-secondary)'
-                }}
               >
                 Login
-              </button>
+              </Button>
             )}
-          </div>
-        </div>
-      </div>
-      
+          </Box>
+          </Toolbar>
+        </Container>
+      </AppBar>
+
+      {/* User Menu */}
+      <Menu
+        anchorEl={anchorEl}
+        open={isMenuOpen}
+        onClose={handleMenuClose}
+        onClick={handleMenuClose}
+        PaperProps={{
+          elevation: 3,
+          sx: {
+            mt: 1.5,
+            minWidth: 200,
+            '& .MuiAvatar-root': {
+              width: 32,
+              height: 32,
+              ml: -0.5,
+              mr: 1,
+            },
+          },
+        }}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        {user && (
+          <>
+            <MenuItem disabled>
+              <ListItemIcon>
+                <Avatar sx={{ width: 24, height: 24 }}>{user.username[0].toUpperCase()}</Avatar>
+              </ListItemIcon>
+              <Box>
+                <Typography variant="body2" fontWeight="bold">
+                  {user.username}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {user.email}
+                </Typography>
+              </Box>
+            </MenuItem>
+            <Divider />
+            <MenuItem onClick={handleLogout}>
+              <ListItemIcon>
+                <LogoutIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Logout</ListItemText>
+            </MenuItem>
+          </>
+        )}
+      </Menu>
+
       {/* Theme Picker Modal */}
       <ThemePicker 
         isOpen={isThemePickerOpen} 
         onClose={() => setIsThemePickerOpen(false)} 
       />
-    </header>
+    </>
   );
 };
 
