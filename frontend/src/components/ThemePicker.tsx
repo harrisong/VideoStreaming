@@ -175,6 +175,10 @@ const ThemePicker: React.FC<ThemePickerProps> = ({ isOpen, onClose }) => {
         return <YouTubeIcon />;
       case 'vimeo':
         return <VideoLibraryIcon />;
+      case 'burnOrange':
+        return <DarkModeIcon sx={{ color: '#D2691E' }} />;
+      case 'burnOrangeLight':
+        return <LightModeIcon sx={{ color: '#D2691E' }} />;
       default:
         return <PaletteIcon />;
     }

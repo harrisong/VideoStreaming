@@ -31,30 +31,55 @@ export const MuiThemeProvider: React.FC<MuiThemeProviderProps> = ({ children }) 
       },
     },
     typography: {
-      fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+      fontFamily: '"Satoshi", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif',
       h1: {
         color: currentTheme.text,
+        fontWeight: 700,
+        letterSpacing: '-0.025em',
       },
       h2: {
         color: currentTheme.text,
+        fontWeight: 700,
+        letterSpacing: '-0.025em',
       },
       h3: {
         color: currentTheme.text,
+        fontWeight: 600,
+        letterSpacing: '-0.02em',
       },
       h4: {
         color: currentTheme.text,
+        fontWeight: 600,
+        letterSpacing: '-0.02em',
       },
       h5: {
         color: currentTheme.text,
+        fontWeight: 600,
+        letterSpacing: '-0.01em',
       },
       h6: {
         color: currentTheme.text,
+        fontWeight: 600,
+        letterSpacing: '-0.01em',
       },
       body1: {
         color: currentTheme.text,
+        fontWeight: 400,
+        lineHeight: 1.6,
       },
       body2: {
         color: currentTheme.textSecondary,
+        fontWeight: 400,
+        lineHeight: 1.5,
+      },
+      button: {
+        fontWeight: 500,
+        letterSpacing: '0.01em',
+        textTransform: 'none',
+      },
+      caption: {
+        fontWeight: 400,
+        letterSpacing: '0.01em',
       },
     },
     components: {

@@ -87,6 +87,30 @@ const predefinedThemes: { [key: string]: Theme } = {
     textSecondary: '#6b7280',
     plyrColor: '#4f46e5',
     isDark: false
+  },
+  burnOrange: {
+    name: 'Burn Orange',
+    primary: '#D2691E',
+    secondary: '#A0522D',
+    accent: '#FF8C00',
+    background: '#2F1B14',
+    surface: '#3D2317',
+    text: '#F5DEB3',
+    textSecondary: '#DEB887',
+    plyrColor: '#D2691E',
+    isDark: true
+  },
+  burnOrangeLight: {
+    name: 'Burn Orange Light',
+    primary: '#D2691E',
+    secondary: '#A0522D',
+    accent: '#FF8C00',
+    background: '#FFF8DC',
+    surface: '#FAEBD7',
+    text: '#8B4513',
+    textSecondary: '#A0522D',
+    plyrColor: '#D2691E',
+    isDark: false
   }
 };
 
