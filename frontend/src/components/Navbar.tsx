@@ -51,7 +51,13 @@ const Navbar: React.FC<{
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
     if (token && storedUser) {
-      setUser(JSON.parse(storedUser));
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (error) {
+        console.error('Error parsing stored user data:', error);
+        localStorage.removeItem('user');
+        setUser(null);
+      }
     } else {
       setUser(null);
     }
@@ -61,7 +67,13 @@ const Navbar: React.FC<{
       const updatedToken = localStorage.getItem('token');
       const updatedUser = localStorage.getItem('user');
       if (updatedToken && updatedUser) {
-        setUser(JSON.parse(updatedUser));
+        try {
+          setUser(JSON.parse(updatedUser));
+        } catch (error) {
+          console.error('Error parsing updated user data:', error);
+          localStorage.removeItem('user');
+          setUser(null);
+        }
       } else {
         setUser(null);
       }

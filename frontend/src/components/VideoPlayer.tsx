@@ -45,7 +45,7 @@ const VideoPlayer: React.FC = () => {
   const [isWatchParty, setIsWatchParty] = useState(false);
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
-  const [isFullWidth, setIsFullWidth] = useState(false);
+  const [isFullWidth, setIsFullWidth] = useState(window.innerWidth < 1024); // Default to full width on mobile
   
   // Video player state
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -82,9 +82,11 @@ const VideoPlayer: React.FC = () => {
     if (token) {
       try {
         const payload = token.split('.')[1];
-        const decodedPayload = JSON.parse(atob(payload));
-        if (decodedPayload.user_id) {
-          setCurrentUserId(decodedPayload.user_id);
+        if (payload) {
+          const decodedPayload = JSON.parse(atob(payload));
+          if (decodedPayload && decodedPayload.user_id) {
+            setCurrentUserId(decodedPayload.user_id);
+          }
         }
       } catch (error) {
         console.error('Error extracting user ID from token:', error);
@@ -424,28 +426,30 @@ const VideoPlayer: React.FC = () => {
 
       websocket.onmessage = (event) => {
         try {
-          const message = JSON.parse(event.data);
-          if (message.type_field === 'watchPartyControl') {
-            if (message.source_id && currentUserId) {
-              const sourceIdParts = message.source_id.split('_');
-              if (sourceIdParts.length >= 2) {
-                const sourceUserId = parseInt(sourceIdParts[1]);
-                if (sourceUserId === currentUserId) {
-                  return;
+          if (event.data) {
+            const message = JSON.parse(event.data);
+            if (message.type_field === 'watchPartyControl') {
+              if (message.source_id && currentUserId) {
+                const sourceIdParts = message.source_id.split('_');
+                if (sourceIdParts.length >= 2) {
+                  const sourceUserId = parseInt(sourceIdParts[1]);
+                  if (sourceUserId === currentUserId) {
+                    return;
+                  }
                 }
               }
-            }
-            
-            if (videoRef.current) {
-              if (message.action === 'play') {
-                videoRef.current.play();
-                setIsPlaying(true);
-              } else if (message.action === 'pause') {
-                videoRef.current.pause();
-                setIsPlaying(false);
-              } else if (message.action === 'seek' && message.time !== undefined) {
-                videoRef.current.currentTime = message.time;
-                setCurrentTime(message.time);
+              
+              if (videoRef.current) {
+                if (message.action === 'play') {
+                  videoRef.current.play();
+                  setIsPlaying(true);
+                } else if (message.action === 'pause') {
+                  videoRef.current.pause();
+                  setIsPlaying(false);
+                } else if (message.action === 'seek' && message.time !== undefined) {
+                  videoRef.current.currentTime = message.time;
+                  setCurrentTime(message.time);
+                }
               }
             }
           }
@@ -727,17 +731,46 @@ const VideoPlayer: React.FC = () => {
               </Box>
 
               {/* Video Info */}
-              <Box sx={{ p: 3 }}>
-                <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 700 }}>
+              <Box sx={{ p: { xs: 2, sm: 3 } }}>
+                <Typography 
+                  variant="h6" 
+                  component="h1" 
+                  gutterBottom 
+                  sx={{ 
+                    fontWeight: 600,
+                    fontSize: { xs: '1.1rem', sm: '1.25rem' },
+                    lineHeight: 1.3,
+                  }}
+                >
                   {video ? video.title : 'Loading...'}
                 </Typography>
                 
-                <Typography variant="body1" color="text.secondary" sx={{ mb: 2, lineHeight: 1.6 }}>
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary" 
+                  sx={{ 
+                    mb: 1.5, 
+                    lineHeight: 1.4,
+                    fontSize: { xs: '0.85rem', sm: '0.875rem' },
+                    display: '-webkit-box',
+                    WebkitLineClamp: { xs: 2, sm: 3 },
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                  }}
+                >
                   {video ? video.description : 'Loading description...'}
                 </Typography>
                 
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-                  Views: {video ? video.view_count.toLocaleString() : 0}
+                <Typography 
+                  variant="caption" 
+                  color="text.secondary" 
+                  sx={{ 
+                    mb: 1.5, 
+                    display: 'block',
+                    fontSize: { xs: '0.75rem', sm: '0.8rem' },
+                  }}
+                >
+                  {video ? video.view_count.toLocaleString() : 0} views
                 </Typography>
                 
                 {/* Tags */}

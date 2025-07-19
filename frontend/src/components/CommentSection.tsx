@@ -1,5 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import EmojiPicker from 'emoji-picker-react';
+import {
+  Box,
+  Typography,
+  TextField,
+  Button,
+  IconButton,
+  Collapse,
+  Divider,
+} from '@mui/material';
+import {
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  EmojiEmotions as EmojiEmotionsIcon,
+  Send as SendIcon,
+} from '@mui/icons-material';
 import { buildApiUrl, buildWebSocketUrl, API_CONFIG } from '../config';
 
 interface Comment {
@@ -48,9 +63,15 @@ const CommentSection: React.FC<CommentSectionProps> = ({ videoId, currentTime })
       console.log('WebSocket connected');
     };
     websocket.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      if (message.type === 'newComment') {
-        setComments(prev => [...prev, message.comment]);
+      try {
+        if (event.data) {
+          const message = JSON.parse(event.data);
+          if (message.type === 'newComment') {
+            setComments(prev => [...prev, message.comment]);
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
       }
     };
     websocket.onerror = (error) => {
@@ -120,7 +141,9 @@ const CommentSection: React.FC<CommentSectionProps> = ({ videoId, currentTime })
   };
 
   const onEmojiClick = (emojiObject: any) => {
-    setNewComment(prev => prev + emojiObject.emoji);
+    // Use the emoji character, not the image
+    const emojiChar = emojiObject.emoji || emojiObject.native || emojiObject.shortcodes;
+    setNewComment(prev => prev + emojiChar);
     setShowEmojiPicker(false);
   };
 
@@ -130,86 +153,172 @@ const CommentSection: React.FC<CommentSectionProps> = ({ videoId, currentTime })
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true); // Start collapsed by default
+  const [showComments, setShowComments] = useState(false);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="comment-section-themed rounded-lg shadow-md p-3">
-        <div className="flex justify-between items-center mb-2">
-          <h3 className="text-lg font-semibold theme-text">Live Comments</h3>
-          <button 
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {/* Live Comments - Subtle and Minimized */}
+      <Box sx={{ 
+        backgroundColor: 'background.paper', 
+        borderRadius: 1, 
+        p: 1.5,
+        border: '1px solid',
+        borderColor: 'divider',
+      }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+          <Typography 
+            variant="caption" 
+            sx={{ 
+              color: 'text.secondary',
+              fontSize: '0.75rem',
+              fontWeight: 500,
+            }}
+          >
+            Live Comments ({visibleComments.length})
+          </Typography>
+          <IconButton 
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1 rounded-md hover:opacity-80 focus:outline-none"
-            style={{
-              backgroundColor: 'var(--theme-accent)',
-              color: 'var(--theme-text)'
+            size="small"
+            sx={{ 
+              opacity: 0.5,
+              '&:hover': { opacity: 0.8 },
+              p: 0.25,
             }}
           >
-            {isCollapsed ? '▶' : '▼'}
-          </button>
-        </div>
-        {!isCollapsed && (
-          <div className="border rounded-md overflow-y-auto h-96 p-2" style={{
-            backgroundColor: 'var(--theme-background)',
-            borderColor: 'var(--theme-text-secondary)'
+            {isCollapsed ? <ExpandMoreIcon fontSize="small" /> : <ExpandLessIcon fontSize="small" />}
+          </IconButton>
+        </Box>
+        
+        <Collapse in={!isCollapsed}>
+          <Box sx={{ 
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 1,
+            maxHeight: 120,
+            overflow: 'auto',
+            p: 0.5,
+            backgroundColor: 'background.default',
           }}>
-            {visibleComments.map(comment => (
-              <div key={comment.id} className="comment-themed mb-2 p-2 border-b">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-semibold text-sm theme-text">User {comment.user_id}</span>
-                  <span className="text-xs theme-text-secondary">{formatTime(comment.video_time)}</span>
-                </div>
-                <p className="theme-text text-sm">{comment.content}</p>
-              </div>
+            {visibleComments.slice(-5).map(comment => (
+              <Box key={comment.id} sx={{ mb: 0.5, p: 0.5, opacity: 0.8 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.7rem' }}>
+                    User {comment.user_id}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                    {formatTime(comment.video_time)}
+                  </Typography>
+                </Box>
+                <Typography 
+                  variant="caption" 
+                  sx={{ 
+                    fontSize: '0.7rem',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {comment.content}
+                </Typography>
+              </Box>
             ))}
-          </div>
-        )}
-      </div>
-      <div className="flex-1">
-        <h3 className="text-lg font-semibold mb-2 theme-text">Comments</h3>
-        <form onSubmit={handleCommentSubmit} className="mb-4">
-          <div className="flex items-start gap-2">
-            <textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Add a comment..."
-              className="flex-1 p-2 border rounded-md focus:outline-none focus:ring-2"
-              style={{
-                backgroundColor: 'var(--theme-surface)',
-                color: 'var(--theme-text)',
-                borderColor: 'var(--theme-text-secondary)'
-              }}
-              rows={3}
-            />
-            <button
-              type="button"
-              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              className="p-2 rounded-md hover:opacity-80"
-              style={{
-                backgroundColor: 'var(--theme-accent)',
-                color: 'var(--theme-text)'
-              }}
-            >
-              😊
-            </button>
-          </div>
-          {showEmojiPicker && (
-            <div className="absolute z-10 mt-2">
-              <EmojiPicker onEmojiClick={onEmojiClick} />
-            </div>
-          )}
-          <button
-            type="submit"
-            className="mt-2 px-4 py-2 text-white rounded-md hover:opacity-90 focus:outline-none focus:ring-2"
-            style={{
-              backgroundColor: 'var(--theme-primary)'
-            }}
-          >
-            Post Comment
-          </button>
-        </form>
-      </div>
-    </div>
+          </Box>
+        </Collapse>
+      </Box>
+
+      {/* Comments Toggle */}
+      <Button
+        onClick={() => setShowComments(!showComments)}
+        variant="text"
+        size="small"
+        endIcon={showComments ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        sx={{ 
+          justifyContent: 'flex-start',
+          textTransform: 'none',
+          color: 'text.primary',
+          fontSize: '0.875rem',
+          fontWeight: 500,
+          p: 1,
+        }}
+      >
+        Comments ({comments.length})
+      </Button>
+
+      {/* Comments Section - Collapsible */}
+      <Collapse in={showComments}>
+        <Box sx={{ mt: 1 }}>
+          <Box component="form" onSubmit={handleCommentSubmit} sx={{ mb: 2 }}>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+              <TextField
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Add a comment..."
+                multiline
+                rows={2}
+                size="small"
+                fullWidth
+                variant="outlined"
+                sx={{ 
+                  '& .MuiOutlinedInput-root': {
+                    fontSize: '0.875rem',
+                  }
+                }}
+              />
+              <IconButton
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                size="small"
+                color="primary"
+                sx={{ mt: 0.5 }}
+              >
+                <EmojiEmotionsIcon fontSize="small" />
+              </IconButton>
+              <IconButton
+                type="submit"
+                size="small"
+                color="primary"
+                sx={{ 
+                  mt: 0.5,
+                  '&:hover': { 
+                    backgroundColor: 'rgba(0, 0, 0, 0.04)' 
+                  }
+                }}
+              >
+                <SendIcon fontSize="small" />
+              </IconButton>
+            </Box>
+            
+            {showEmojiPicker && (
+              <Box sx={{ position: 'absolute', zIndex: 10, mt: 1 }}>
+                <EmojiPicker 
+                  onEmojiClick={onEmojiClick}
+                />
+              </Box>
+            )}
+          </Box>
+
+          {/* All Comments List */}
+          <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+            {comments.map(comment => (
+              <Box key={comment.id} sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    User {comment.user_id}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {formatTime(comment.video_time)}
+                  </Typography>
+                </Box>
+                <Typography variant="body2" color="text.primary">
+                  {comment.content}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      </Collapse>
+    </Box>
   );
 };
 
