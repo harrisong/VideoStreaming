@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from './Navbar';
 import { buildApiUrl, API_CONFIG } from '../config';
+import { useSearchFocus } from '../contexts/SearchFocusContext';
 
 interface Category {
   id: number;
@@ -28,6 +29,7 @@ const Categories: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { categoryId } = useParams<{ categoryId: string }>();
+  const { isSearchFocused } = useSearchFocus();
 
   useEffect(() => {
     fetchCategories();
@@ -97,7 +99,14 @@ const Categories: React.FC = () => {
   return (
     <div className="video-container-themed min-h-screen">
       <Navbar onSearch={handleSearch} />
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <main 
+        className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 transition-all duration-300 ease-in-out"
+        style={{
+          filter: isSearchFocused ? 'blur(8px)' : 'none',
+          opacity: isSearchFocused ? 0.3 : 1,
+          pointerEvents: isSearchFocused ? 'none' : 'auto',
+        }}
+      >
         {/* Categories Grid */}
         {!selectedCategory && (
           <div>

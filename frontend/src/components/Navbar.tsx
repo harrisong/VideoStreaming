@@ -29,6 +29,7 @@ import {
 import { buildApiUrl, API_CONFIG } from '../config';
 import ThemePicker from './ThemePicker';
 import Logo from './Logo';
+import { useSearchFocus } from '../contexts/SearchFocusContext';
 
 const Navbar: React.FC<{ 
   onWatchPartyToggle?: () => void; 
@@ -41,6 +42,7 @@ const Navbar: React.FC<{
   const [searchQuery, setSearchQuery] = useState('');
   const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const { isSearchFocused, setIsSearchFocused } = useSearchFocus();
 
   const isMenuOpen = Boolean(anchorEl);
 
@@ -147,6 +149,8 @@ const Navbar: React.FC<{
                   size="small"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => setIsSearchFocused(false)}
                   placeholder="Search videos..."
                   InputProps={{
                     endAdornment: (

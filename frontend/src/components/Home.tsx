@@ -22,6 +22,7 @@ import {
 import Navbar from './Navbar';
 import CategorySidebar from './CategorySidebar';
 import { buildApiUrl, API_CONFIG } from '../config';
+import { useSearchFocus } from '../contexts/SearchFocusContext';
 
 const Home: React.FC = () => {
   const [videos, setVideos] = useState<any[]>([]);
@@ -31,6 +32,7 @@ const Home: React.FC = () => {
   const [isFilteringByCategory, setIsFilteringByCategory] = useState(false);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { isSearchFocused } = useSearchFocus();
 
   useEffect(() => {
     const fetchVideos = async () => {
@@ -132,7 +134,18 @@ const Home: React.FC = () => {
     <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default' }}>
       <Navbar onSearch={handleSearch} />
       
-      <Container maxWidth="xl" sx={{ py: 3 }}>
+      <Container 
+        maxWidth="xl" 
+        sx={{ 
+          py: 3,
+          transition: 'all 0.3s ease-in-out',
+          ...(isSearchFocused && {
+            filter: 'blur(8px)',
+            opacity: 0.3,
+            pointerEvents: 'none',
+          }),
+        }}
+      >
         <Box sx={{ display: 'flex', gap: 3 }}>
           {/* Category Sidebar */}
           <Box sx={{ 
