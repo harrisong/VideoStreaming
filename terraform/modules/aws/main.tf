@@ -64,6 +64,7 @@ variable "common_tags" {
   default     = {}
 }
 
+
 # Local values
 locals {
   # ECS task sizes
@@ -349,7 +350,7 @@ resource "aws_db_instance" "main" {
   identifier = "${var.environment}-video-streaming-db"
 
   engine         = "postgres"
-  engine_version = "15.8"
+  engine_version = "15.12"
   instance_class = "db.t3.micro"
 
   allocated_storage     = 20
@@ -401,6 +402,7 @@ resource "aws_elasticache_replication_group" "main" {
 
   at_rest_encryption_enabled = true
   transit_encryption_enabled = true
+  apply_immediately          = true
 
   automatic_failover_enabled = true
   multi_az_enabled          = true
@@ -734,64 +736,7 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
-  }
-}
-
-resource "aws_lb_listener_rule" "api" {
-  listener_arn = aws_lb_listener.https.arn
-  priority     = 100
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/api/*"]
-    }
-  }
-}
-
-# WebSocket-specific listener rule (higher priority to catch WebSocket upgrades)
-resource "aws_lb_listener_rule" "websocket" {
-  listener_arn = aws_lb_listener.https.arn
-  priority     = 50
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.websocket.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/api/ws/*"]
-    }
-  }
-}
-
-# Additional WebSocket listener rule for HTTP upgrade requests
-resource "aws_lb_listener_rule" "websocket_upgrade" {
-  listener_arn = aws_lb_listener.https.arn
-  priority     = 40
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.websocket.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/api/ws/*"]
-    }
-  }
-
-  condition {
-    http_header {
-      http_header_name = "Upgrade"
-      values          = ["websocket"]
-    }
+    target_group_arn = aws_lb_target_group.nginx_proxy.arn
   }
 }
 
@@ -898,8 +843,8 @@ resource "aws_ecs_task_definition" "db_migration" {
   family                   = "${var.environment}-video-streaming-db-migration"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 256
-  memory                   = 512
+  cpu                      = 512
+  memory                   = 1024
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
   task_role_arn           = aws_iam_role.ecs_task.arn
 
@@ -908,15 +853,20 @@ resource "aws_ecs_task_definition" "db_migration" {
       name  = "db-migration"
       image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com/${var.environment}-video-streaming-backend:latest"
       
+      # Use SQLx migrate command for proper database migrations
       command = [
         "sh", "-c", 
-        "apt-get update && apt-get install -y postgresql-client && psql \"$DATABASE_URL\" -f /app/init-db.sql"
+        "echo 'Starting database migration...' && sqlx migrate run --database-url \"$DATABASE_URL\" && echo 'Migration completed successfully!'"
       ]
 
       environment = [
         {
           name  = "DATABASE_URL"
           value = "postgres://postgres:${random_password.db_password.result}@${aws_db_instance.main.endpoint}/video_streaming_db?sslmode=require"
+        },
+        {
+          name  = "RUST_LOG"
+          value = "info"
         }
       ]
 
@@ -961,139 +911,6 @@ resource "null_resource" "db_migration" {
   }
 }
 
-# ECS Task Definition
-resource "aws_ecs_task_definition" "app" {
-  family                   = "${var.environment}-video-streaming"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = local.task_cpu
-  memory                   = local.task_memory
-  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
-  task_role_arn           = aws_iam_role.ecs_task.arn
-
-  container_definitions = jsonencode([
-    {
-      name  = "backend"
-      image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com/${var.environment}-video-streaming-backend:latest"
-      
-      portMappings = [
-        {
-          containerPort = 5050
-          protocol      = "tcp"
-        },
-        {
-          containerPort = 8080
-          protocol      = "tcp"
-        }
-      ]
-
-      environment = [
-        {
-          name  = "DATABASE_URL"
-          value = "postgres://postgres:${random_password.db_password.result}@${aws_db_instance.main.endpoint}/video_streaming_db"
-        },
-        {
-          name  = "REDIS_URL"
-          value = "redis://${aws_elasticache_replication_group.main.primary_endpoint_address}:6379"
-        },
-        {
-          name  = "S3_BUCKET"
-          value = aws_s3_bucket.videos.bucket
-        },
-        {
-          name  = "AWS_REGION"
-          value = var.region
-        },
-        {
-          name  = "CORS_ALLOWED_ORIGINS"
-          value = "https://${var.domain_name},http://${var.domain_name}"
-        }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.ecs.name
-          awslogs-region        = var.region
-          awslogs-stream-prefix = "backend"
-        }
-      }
-
-      essential = true
-    },
-    {
-      name  = "frontend"
-      image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com/${var.environment}-video-streaming-frontend:latest"
-      
-      portMappings = [
-        {
-          containerPort = 3000
-          protocol      = "tcp"
-        }
-      ]
-
-      environment = [
-        {
-          name  = "REACT_APP_API_URL"
-          value = "https://${var.domain_name}/api"
-        }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.ecs.name
-          awslogs-region        = var.region
-          awslogs-stream-prefix = "frontend"
-        }
-      }
-
-      essential = true
-    }
-  ])
-
-  tags = var.common_tags
-}
-
-# ECS Service
-resource "aws_ecs_service" "main" {
-  name            = "${var.environment}-video-streaming"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.app.arn
-  desired_count   = var.server_count
-  launch_type     = "FARGATE"
-
-  network_configuration {
-    security_groups  = [aws_security_group.ecs.id]
-    subnets          = aws_subnet.private[*].id
-    assign_public_ip = false
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.backend.arn
-    container_name   = "backend"
-    container_port   = 5050
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.websocket.arn
-    container_name   = "backend"
-    container_port   = 8080
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.frontend.arn
-    container_name   = "frontend"
-    container_port   = 3000
-  }
-
-  depends_on = [
-    aws_lb_listener.https,
-    aws_iam_role_policy_attachment.ecs_task_execution
-  ]
-
-  tags = var.common_tags
-}
 
 # ECR Repositories
 resource "aws_ecr_repository" "backend" {
@@ -1551,7 +1368,6 @@ output "server_info" {
   description = "Service information"
   value = {
     ecs_cluster    = aws_ecs_cluster.main.name
-    ecs_service    = aws_ecs_service.main.name
     database       = aws_db_instance.main.endpoint
     redis          = aws_elasticache_replication_group.main.primary_endpoint_address
     s3_videos      = aws_s3_bucket.videos.bucket
@@ -1589,9 +1405,11 @@ output "s3_buckets" {
 output "ecr_repositories" {
   description = "ECR repository URLs"
   value = {
-    backend  = aws_ecr_repository.backend.repository_url
-    frontend = aws_ecr_repository.frontend.repository_url
-    scraper  = aws_ecr_repository.scraper.repository_url
+    backend           = aws_ecr_repository.backend.repository_url
+    frontend          = aws_ecr_repository.frontend.repository_url
+    frontend_sidecar  = aws_ecr_repository.frontend_sidecar.repository_url
+    nginx_sidecar     = aws_ecr_repository.nginx_sidecar.repository_url
+    scraper           = aws_ecr_repository.scraper.repository_url
   }
 }
 
