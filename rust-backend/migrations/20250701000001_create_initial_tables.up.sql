@@ -46,12 +46,15 @@ CREATE INDEX IF NOT EXISTS jobs_job_id_idx ON jobs (job_id);
 CREATE INDEX IF NOT EXISTS jobs_status_idx ON jobs (status);
 
 -- Insert sample data for testing
--- Insert a sample user (password is hashed for 'password123')
-INSERT INTO users (username, email, password) 
-VALUES ('testuser', 'test@example.com', '$2b$10$X7VYFDe.9uoyfW7Mbdzc/.8U9tR5FTfAZrB6iZ9eMW8o7G7o9eP7W')
-ON CONFLICT (username) DO NOTHING;
+DO $$
+BEGIN
+    -- Insert a sample user (password is hashed for 'password123')
+    INSERT INTO users (username, email, password) 
+    SELECT 'testuser', 'test@example.com', '$2b$10$X7VYFDe.9uoyfW7Mbdzc/.8U9tR5FTfAZrB6iZ9eMW8o7G7o9eP7W'
+    WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = 'testuser');
 
--- Insert a sample video (note: we need a unique constraint on s3_key for this to work properly)
-INSERT INTO videos (title, description, s3_key, thumbnail_url, uploaded_by, tags)
-VALUES ('Sample Video 4', 'This is a sample video for testing purposes.', 'videos/sample_video_4.webm', 'https://via.placeholder.com/150', 1, ARRAY['_some-tag'])
-ON CONFLICT (s3_key) DO NOTHING;
+    -- Insert a sample video
+    INSERT INTO videos (title, description, s3_key, thumbnail_url, uploaded_by, tags)
+    SELECT 'Sample Video 4', 'This is a sample video for testing purposes.', 'videos/sample_video_4.webm', 'https://via.placeholder.com/150', 1, ARRAY['_some-tag']
+    WHERE NOT EXISTS (SELECT 1 FROM videos WHERE s3_key = 'videos/sample_video_4.webm');
+END $$;

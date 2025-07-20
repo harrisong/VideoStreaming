@@ -248,6 +248,13 @@ resource "aws_security_group" "ecs" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  ingress {
     from_port       = 5050
     to_port         = 5050
     protocol        = "tcp"
@@ -678,8 +685,8 @@ resource "aws_lb_target_group" "websocket" {
     enabled             = true
     healthy_threshold   = 2
     interval            = 30
-    matcher             = "200,400,426"  # 426 is WebSocket upgrade required
-    path                = "/api/ws/comments/1"
+    matcher             = "200"
+    path                = "/api/ws/health"
     port                = "traffic-port"
     protocol            = "HTTP"
     timeout             = 10
@@ -853,10 +860,9 @@ resource "aws_ecs_task_definition" "db_migration" {
       name  = "db-migration"
       image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com/${var.environment}-video-streaming-backend:latest"
       
-      # Use SQLx migrate command for proper database migrations
+      # Use the backend binary with migration flag
       command = [
-        "sh", "-c", 
-        "echo 'Starting database migration...' && sqlx migrate run --database-url \"$DATABASE_URL\" && echo 'Migration completed successfully!'"
+        "./video_streaming_backend", "--migrate"
       ]
 
       environment = [

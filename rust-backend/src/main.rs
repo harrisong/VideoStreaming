@@ -6,14 +6,40 @@ use tokio::sync::Mutex;
 use std::sync::Arc;
 use log::{info, error};
 use env_logger;
+use std::env;
 
 // Import from the crate root
 use video_streaming_backend::{AppState, job_queue, handlers, websocket, services};
+
+async fn run_migrations() -> Result<(), sqlx::Error> {
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set");
+    
+    let pool = sqlx::postgres::PgPool::connect(&database_url).await?;
+    
+    info!("Connected to database, running migrations...");
+    sqlx::migrate!("./migrations").run(&pool).await?;
+    
+    pool.close().await;
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
     env_logger::init();
+    
+    // Check for migration flag
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 1 && args[1] == "--migrate" {
+        info!("Running database migrations...");
+        if let Err(e) = run_migrations().await {
+            error!("Migration failed: {:?}", e);
+            std::process::exit(1);
+        }
+        info!("Migrations completed successfully!");
+        return Ok(());
+    }
     let db_pool = services::init_db_pool().await;
     let s3_client = services::init_s3_client().await;
     

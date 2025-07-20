@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Terraform Infrastructure Deployment Script for Video Streaming Service
-# This script manages infrastructure deployment across multiple cloud providers
+# Terraform deployment script for sidecar architecture
+# This script deploys the video streaming application with nginx sidecar pattern
 
-set -e  # Exit on any error
+set -e
 
 # Colors for output
 RED='\033[0;31m'
@@ -12,431 +12,302 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Logging functions
-log() {
-    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
+# Function to print colored output
+print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
 }
 
-warn() {
-    echo -e "${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] WARNING: $1${NC}"
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
-error() {
-    echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}"
-    exit 1
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
-info() {
-    echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')] INFO: $1${NC}"
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Help function
-show_help() {
-    cat << EOF
-Terraform Infrastructure Deployment Script
-
-Usage: $0 [COMMAND] [OPTIONS]
-
-Commands:
-    init        Initialize Terraform
-    plan        Show deployment plan
-    apply       Deploy infrastructure
-    destroy     Destroy infrastructure
-    output      Show infrastructure outputs
-    switch      Switch cloud provider
-    validate    Validate configuration
-    help        Show this help message
-
-Options:
-    -p, --provider PROVIDER    Cloud provider (hetzner, digitalocean, vultr, linode)
-    -e, --environment ENV      Environment (dev, staging, prod)
-    -s, --size SIZE           Server size (small, medium, large)
-    -c, --count COUNT         Number of servers
-    -d, --domain DOMAIN       Domain name
-    -f, --force               Force operation without confirmation
-    -v, --verbose             Verbose output
-
-Examples:
-    $0 init
-    $0 plan --provider hetzner --environment prod
-    $0 apply --provider hetzner --domain example.com
-    $0 switch --provider digitalocean
-    $0 destroy --force
-
-Environment Variables:
-    HCLOUD_TOKEN              Hetzner Cloud API token
-    DIGITALOCEAN_TOKEN        DigitalOcean API token
-    VULTR_API_KEY            Vultr API key
-    LINODE_TOKEN             Linode API token
-    CLOUDFLARE_API_TOKEN     Cloudflare API token (optional)
-
-EOF
-}
-
-# Check dependencies
+# Check if required tools are installed
 check_dependencies() {
-    local deps=("terraform" "curl" "jq")
-    for dep in "${deps[@]}"; do
-        if ! command -v "$dep" &> /dev/null; then
-            error "Required dependency '$dep' is not installed"
-        fi
-    done
-}
-
-# Install Terraform if not present
-install_terraform() {
+    print_status "Checking dependencies..."
+    
     if ! command -v terraform &> /dev/null; then
-        log "Installing Terraform..."
-        
-        # Detect OS
-        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-        ARCH=$(uname -m)
-        
-        case $ARCH in
-            x86_64) ARCH="amd64" ;;
-            arm64|aarch64) ARCH="arm64" ;;
-            *) error "Unsupported architecture: $ARCH" ;;
-        esac
-        
-        # Download and install Terraform
-        TERRAFORM_VERSION="1.6.6"
-        TERRAFORM_URL="https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_${OS}_${ARCH}.zip"
-        
-        curl -fsSL "$TERRAFORM_URL" -o terraform.zip
-        unzip terraform.zip
-        sudo mv terraform /usr/local/bin/
-        rm terraform.zip
-        
-        log "Terraform installed successfully"
-    fi
-}
-
-# Validate configuration
-validate_config() {
-    if [ ! -f "terraform/terraform.tfvars" ]; then
-        warn "terraform.tfvars not found. Creating from example..."
-        cp terraform/terraform.tfvars.example terraform/terraform.tfvars
-        error "Please edit terraform/terraform.tfvars with your configuration"
+        print_error "Terraform is not installed. Please install Terraform first."
+        exit 1
     fi
     
-    # Check required variables
-    local required_vars=("domain_name" "ssh_public_key")
-    for var in "${required_vars[@]}"; do
-        if ! grep -q "^${var}.*=" terraform/terraform.tfvars; then
-            error "Required variable '$var' not set in terraform.tfvars"
+    if ! command -v aws &> /dev/null; then
+        print_error "AWS CLI is not installed. Please install AWS CLI first."
+        exit 1
+    fi
+    
+    if ! command -v docker &> /dev/null; then
+        print_error "Docker is not installed. Please install Docker first."
+        exit 1
+    fi
+    
+    print_success "All dependencies are installed."
+}
+
+# Check AWS credentials
+check_aws_credentials() {
+    print_status "Checking AWS credentials..."
+    
+    # Check for AWS credentials in environment variables
+    if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+        print_warning "AWS credentials not found in environment variables."
+        print_status "Checking AWS CLI configuration..."
+        
+        # Fallback to AWS CLI configuration
+        if ! timeout 30 aws sts get-caller-identity &> /dev/null; then
+            print_error "AWS credentials are not configured. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables or run 'aws configure'."
+            print_status "Example:"
+            print_status "export AWS_ACCESS_KEY_ID=your_access_key"
+            print_status "export AWS_SECRET_ACCESS_KEY=your_secret_key"
+            print_status "export AWS_DEFAULT_REGION=us-west-2"
+            exit 1
         fi
-    done
+    fi
+    
+    # Get AWS account ID and region
+    AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
+    
+    # Check for region in environment variable first, then AWS CLI config
+    if [ -n "$AWS_DEFAULT_REGION" ]; then
+        AWS_REGION="$AWS_DEFAULT_REGION"
+    elif [ -n "$AWS_REGION" ]; then
+        AWS_REGION="$AWS_REGION"
+    else
+        AWS_REGION=$(aws configure get region 2>/dev/null || echo "")
+    fi
+    
+    if [ -z "$AWS_ACCOUNT_ID" ]; then
+        print_error "Failed to get AWS account ID. Please check your AWS credentials."
+        exit 1
+    fi
+    
+    if [ -z "$AWS_REGION" ]; then
+        print_warning "AWS region not set. Using us-west-2 as default."
+        AWS_REGION="us-west-2"
+        export AWS_DEFAULT_REGION="$AWS_REGION"
+    fi
+    
+    print_success "AWS credentials configured. Account: $AWS_ACCOUNT_ID, Region: $AWS_REGION"
 }
 
-# Check provider credentials
-check_provider_credentials() {
-    local provider=${1:-$(grep '^cloud_provider' terraform/terraform.tfvars | cut -d'"' -f2)}
+# Get domain name from user
+get_domain_name() {
+    if [ -z "$DOMAIN_NAME" ]; then
+        echo -n "Enter your domain name (e.g., example.com): "
+        read DOMAIN_NAME
+    fi
     
-    case $provider in
-        aws)
-            if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-                error "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are required for AWS"
-            fi
-            ;;
-        hetzner)
-            if [ -z "$HCLOUD_TOKEN" ]; then
-                error "HCLOUD_TOKEN environment variable is required for Hetzner Cloud"
-            fi
-            ;;
-        digitalocean)
-            if [ -z "$DIGITALOCEAN_TOKEN" ]; then
-                error "DIGITALOCEAN_TOKEN environment variable is required for DigitalOcean"
-            fi
-            ;;
-        vultr)
-            if [ -z "$VULTR_API_KEY" ]; then
-                error "VULTR_API_KEY environment variable is required for Vultr"
-            fi
-            ;;
-        linode)
-            if [ -z "$LINODE_TOKEN" ]; then
-                error "LINODE_TOKEN environment variable is required for Linode"
-            fi
-            ;;
-        *)
-            error "Unsupported provider: $provider"
-            ;;
-    esac
+    if [ -z "$DOMAIN_NAME" ]; then
+        print_error "Domain name is required."
+        exit 1
+    fi
+    
+    print_status "Using domain: $DOMAIN_NAME"
+}
+
+# Get environment name
+get_environment() {
+    if [ -z "$ENVIRONMENT" ]; then
+        echo -n "Enter environment name (default: prod): "
+        read ENVIRONMENT
+        ENVIRONMENT=${ENVIRONMENT:-prod}
+    fi
+    
+    print_status "Using environment: $ENVIRONMENT"
+}
+
+# Build and push Docker images
+build_and_push_images() {
+    print_status "Building and pushing Docker images..."
+    
+    export AWS_ACCOUNT_ID
+    export AWS_REGION
+    export ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+    export ENVIRONMENT
+    
+    # Run the sidecar build script
+    if [ -f "./build-and-push.sh" ]; then
+        print_status "Running sidecar container build script..."
+        ./build-and-push.sh
+    else
+        print_error "build-and-push.sh not found. Please ensure it exists in the current directory."
+        exit 1
+    fi
+    
+    print_success "Docker images built and pushed successfully."
 }
 
 # Initialize Terraform
-terraform_init() {
-    log "Initializing Terraform..."
+init_terraform() {
+    print_status "Initializing Terraform..."
+    
     cd terraform
     terraform init
-    cd ..
-    log "Terraform initialized successfully"
+    
+    print_success "Terraform initialized."
 }
 
-# Plan deployment
-terraform_plan() {
-    log "Creating Terraform plan..."
-    cd terraform
-    terraform plan -out=tfplan
-    cd ..
-    log "Terraform plan created successfully"
+# Plan Terraform deployment
+plan_terraform() {
+    print_status "Planning Terraform deployment..."
+    
+    terraform plan \
+        -var="domain_name=$DOMAIN_NAME" \
+        -var="environment=$ENVIRONMENT" \
+        -var="server_count=${SERVER_COUNT:-2}" \
+        -var="server_size=${SERVER_SIZE:-medium}" \
+        -out=tfplan
+    
+    print_success "Terraform plan created."
 }
 
-# Apply deployment
-terraform_apply() {
-    local force=${1:-false}
+# Apply Terraform deployment
+apply_terraform() {
+    print_status "Applying Terraform deployment..."
     
-    log "Applying Terraform configuration..."
-    cd terraform
+    terraform apply tfplan
     
-    if [ "$force" = true ]; then
-        terraform apply -auto-approve
-    else
-        terraform apply
+    print_success "Terraform deployment completed."
+}
+
+# Get deployment outputs
+get_outputs() {
+    print_status "Getting deployment outputs..."
+    
+    echo ""
+    print_success "=== DEPLOYMENT COMPLETED ==="
+    echo ""
+    
+    echo "Load Balancer DNS: $(terraform output -raw load_balancer_ip)"
+    echo "CloudFront Domain: $(terraform output -raw cloudfront_domain)"
+    echo "Database Endpoint: $(terraform output -raw database_endpoint)"
+    echo "Redis Endpoint: $(terraform output -raw redis_endpoint)"
+    echo ""
+    
+    print_status "ECR Repositories:"
+    terraform output -json ecr_repositories | jq -r 'to_entries[] | "  \(.key): \(.value)"'
+    
+    echo ""
+    print_status "S3 Buckets:"
+    terraform output -json s3_buckets | jq -r 'to_entries[] | "  \(.key): \(.value)"'
+    
+    echo ""
+    print_status "Scraper API URL:"
+    echo "  $(terraform output -raw scraper_api_url)"
+    
+    echo ""
+    print_warning "Next Steps:"
+    echo "1. Update your DNS records to point $DOMAIN_NAME to the Load Balancer DNS"
+    echo "2. Wait for SSL certificate validation (may take a few minutes)"
+    echo "3. Access your application at https://$DOMAIN_NAME"
+    echo "4. Use the scraper API to add videos to your platform"
+    
+    cd ..
+}
+
+# Cleanup function
+cleanup() {
+    if [ -f "terraform/tfplan" ]; then
+        rm terraform/tfplan
     fi
-    
-    cd ..
-    log "Infrastructure deployed successfully"
-    
-    # Show outputs
-    show_outputs
 }
 
-# Destroy infrastructure
-terraform_destroy() {
-    local force=${1:-false}
-    
-    warn "This will destroy all infrastructure!"
-    
-    if [ "$force" != true ]; then
-        read -p "Are you sure you want to destroy the infrastructure? (yes/no): " confirm
-        if [ "$confirm" != "yes" ]; then
-            log "Destruction cancelled"
-            return 0
-        fi
-    fi
-    
-    log "Destroying infrastructure..."
-    cd terraform
-    terraform destroy -auto-approve
-    cd ..
-    log "Infrastructure destroyed successfully"
-}
-
-# Show outputs
-show_outputs() {
-    log "Infrastructure outputs:"
-    cd terraform
-    terraform output -json | jq -r '
-        .server_ips.value[] as $ip |
-        "Server IP: \($ip)"
-    '
-    
-    if terraform output -json | jq -e '.load_balancer_ip.value' > /dev/null 2>&1; then
-        terraform output -json | jq -r '
-            "Load Balancer IP: \(.load_balancer_ip.value)"
-        '
-    fi
-    
-    terraform output -json | jq -r '
-        .deployment_info.value.next_steps[] as $step |
-        "Next Step: \($step)"
-    '
-    cd ..
-}
-
-# Switch provider
-switch_provider() {
-    local new_provider=$1
-    
-    if [ -z "$new_provider" ]; then
-        error "Provider not specified"
-    fi
-    
-    log "Switching to provider: $new_provider"
-    
-    # Update terraform.tfvars
-    sed -i.bak "s/^cloud_provider = .*/cloud_provider = \"$new_provider\"/" terraform/terraform.tfvars
-    
-    # Reinitialize Terraform
-    terraform_init
-    
-    log "Switched to $new_provider successfully"
-}
-
-# Validate Terraform configuration
-validate_terraform() {
-    log "Validating Terraform configuration..."
-    cd terraform
-    terraform validate
-    cd ..
-    log "Terraform configuration is valid"
-}
-
-# Generate SSH key if needed
-generate_ssh_key() {
-    if [ ! -f ~/.ssh/id_rsa.pub ]; then
-        log "Generating SSH key pair..."
-        ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""
-        log "SSH key generated at ~/.ssh/id_rsa.pub"
-    fi
-    
-    # Update terraform.tfvars with SSH key
-    local ssh_key=$(cat ~/.ssh/id_rsa.pub)
-    sed -i.bak "s|^ssh_public_key = .*|ssh_public_key = \"$ssh_key\"|" terraform/terraform.tfvars
-}
-
-# Cost estimation
-estimate_costs() {
-    local provider=${1:-$(grep '^cloud_provider' terraform/terraform.tfvars | cut -d'"' -f2)}
-    local server_size=${2:-$(grep '^server_size' terraform/terraform.tfvars | cut -d'"' -f2)}
-    local server_count=${3:-$(grep '^server_count' terraform/terraform.tfvars | cut -d'=' -f2 | tr -d ' ')}
-    
-    info "Cost estimation for $provider:"
-    
-    case $provider in
-        hetzner)
-            case $server_size in
-                small) cost=8.21 ;;
-                medium) cost=12.90 ;;
-                large) cost=25.20 ;;
-            esac
-            ;;
-        digitalocean)
-            case $server_size in
-                small) cost=24.00 ;;
-                medium) cost=48.00 ;;
-                large) cost=96.00 ;;
-            esac
-            ;;
-        vultr)
-            case $server_size in
-                small) cost=20.00 ;;
-                medium) cost=40.00 ;;
-                large) cost=80.00 ;;
-            esac
-            ;;
-        linode)
-            case $server_size in
-                small) cost=12.00 ;;
-                medium) cost=24.00 ;;
-                large) cost=48.00 ;;
-            esac
-            ;;
-    esac
-    
-    local total_cost=$(echo "$cost * $server_count" | bc -l)
-    info "Estimated monthly cost: \$${total_cost} USD (${server_count}x ${server_size} servers)"
-}
-
-# Main script logic
+# Main deployment function
 main() {
-    local command=""
-    local provider=""
-    local environment=""
-    local server_size=""
-    local server_count=""
-    local domain=""
-    local force=false
-    local verbose=false
+    print_status "Starting sidecar deployment for Video Streaming Service..."
     
-    # Parse arguments
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            init|plan|apply|destroy|output|switch|validate|help)
-                command=$1
-                shift
-                ;;
-            -p|--provider)
-                provider="$2"
-                shift 2
-                ;;
-            -e|--environment)
-                environment="$2"
-                shift 2
-                ;;
-            -s|--size)
-                server_size="$2"
-                shift 2
-                ;;
-            -c|--count)
-                server_count="$2"
-                shift 2
-                ;;
-            -d|--domain)
-                domain="$2"
-                shift 2
-                ;;
-            -f|--force)
-                force=true
-                shift
-                ;;
-            -v|--verbose)
-                verbose=true
-                shift
-                ;;
-            *)
-                error "Unknown option: $1"
-                ;;
-        esac
-    done
+    # Set trap for cleanup
+    trap cleanup EXIT
     
-    # Show help if no command
-    if [ -z "$command" ]; then
-        show_help
+    # Check dependencies and credentials
+    check_dependencies
+    check_aws_credentials
+    
+    # Get user input
+    get_domain_name
+    get_environment
+    
+    # Build and push images
+    build_and_push_images
+    
+    # Deploy with Terraform
+    init_terraform
+    plan_terraform
+    
+    # Ask for confirmation
+    echo ""
+    print_warning "Review the Terraform plan above."
+    echo -n "Do you want to proceed with the deployment? (y/N): "
+    read -r CONFIRM
+    
+    if [[ $CONFIRM =~ ^[Yy]$ ]]; then
+        apply_terraform
+        get_outputs
+    else
+        print_status "Deployment cancelled."
         exit 0
     fi
     
-    # Set verbose mode
-    if [ "$verbose" = true ]; then
-        set -x
-    fi
-    
-    # Check dependencies
-    check_dependencies
-    
-    # Install Terraform if needed
-    install_terraform
-    
-    # Execute command
-    case $command in
-        init)
-            terraform_init
-            ;;
-        plan)
-            validate_config
-            check_provider_credentials "$provider"
-            terraform_plan
-            ;;
-        apply)
-            validate_config
-            check_provider_credentials "$provider"
-            estimate_costs "$provider" "$server_size" "$server_count"
-            terraform_apply "$force"
-            ;;
-        destroy)
-            terraform_destroy "$force"
-            ;;
-        output)
-            show_outputs
-            ;;
-        switch)
-            if [ -z "$provider" ]; then
-                error "Provider required for switch command"
-            fi
-            switch_provider "$provider"
-            ;;
-        validate)
-            validate_terraform
-            ;;
-        help)
-            show_help
-            ;;
-        *)
-            error "Unknown command: $command"
-            ;;
-    esac
+    print_success "Sidecar deployment completed successfully!"
 }
 
-# Run main function
-main "$@"
+# Handle command line arguments
+case "${1:-}" in
+    --help|-h)
+        echo "Usage: $0 [OPTIONS]"
+        echo ""
+        echo "Deploy Video Streaming Service with nginx sidecar pattern to AWS"
+        echo ""
+        echo "Environment Variables:"
+        echo "  DOMAIN_NAME           - Your domain name (e.g., example.com)"
+        echo "  ENVIRONMENT           - Environment name (default: prod)"
+        echo "  SERVER_COUNT          - Number of ECS tasks (default: 2)"
+        echo "  SERVER_SIZE           - ECS task size: small, medium, large (default: medium)"
+        echo "  AWS_ACCESS_KEY_ID     - AWS access key ID"
+        echo "  AWS_SECRET_ACCESS_KEY - AWS secret access key"
+        echo "  AWS_DEFAULT_REGION    - AWS region (default: us-west-2)"
+        echo ""
+        echo "Options:"
+        echo "  --help, -h     Show this help message"
+        echo "  --destroy      Destroy the infrastructure"
+        echo ""
+        echo "Examples:"
+        echo "  $0"
+        echo "  DOMAIN_NAME=myapp.com ENVIRONMENT=staging $0"
+        echo "  $0 --destroy"
+        exit 0
+        ;;
+    --destroy)
+        print_warning "This will destroy all infrastructure!"
+        echo -n "Are you sure? Type 'yes' to confirm: "
+        read -r CONFIRM
+        
+        if [ "$CONFIRM" = "yes" ]; then
+            print_status "Destroying infrastructure..."
+            cd terraform
+            terraform destroy \
+                -var="domain_name=${DOMAIN_NAME:-example.com}" \
+                -var="environment=${ENVIRONMENT:-prod}"
+            cd ..
+            print_success "Infrastructure destroyed."
+        else
+            print_status "Destruction cancelled."
+        fi
+        exit 0
+        ;;
+    "")
+        main
+        ;;
+    *)
+        print_error "Unknown option: $1"
+        echo "Use --help for usage information."
+        exit 1
+        ;;
+esac
