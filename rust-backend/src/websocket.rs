@@ -454,7 +454,16 @@ async fn websocket_watchparty(
     Ok(resp)
 }
 
+#[get("/api/ws/health")]
+async fn websocket_health() -> Result<HttpResponse, actix_web::Error> {
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "status": "healthy",
+        "service": "websocket"
+    })))
+}
+
 pub fn configure_ws_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(websocket_comments)
-       .service(websocket_watchparty);
+       .service(websocket_watchparty)
+       .service(websocket_health);
 }
