@@ -27,6 +27,7 @@ async fn setup_test_app() -> impl actix_web::dev::Service<
         db_pool,
         s3_client,
         redis_client: None, // No Redis client in tests
+        job_queue: None, // No job queue in tests
         video_clients: std::sync::Mutex::new(HashMap::new()),
         watchparty_clients: std::sync::Mutex::new(HashMap::new()),
     }));

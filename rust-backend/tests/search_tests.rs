@@ -24,6 +24,7 @@ async fn setup_test_app(pool: PgPool) -> impl actix_web::dev::Service<
         db_pool: pool,
         s3_client,
         redis_client: None,
+        job_queue: None, // No job queue in tests
         video_clients: std::sync::Mutex::new(HashMap::new()),
         watchparty_clients: std::sync::Mutex::new(HashMap::new()),
     }));

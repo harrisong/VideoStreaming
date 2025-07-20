@@ -3,7 +3,6 @@ use dotenv::dotenv;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use std::collections::HashMap;
-use futures::StreamExt;
 
 // Import the necessary modules from the main application
 use video_streaming_backend::handlers;
@@ -32,6 +31,7 @@ async fn setup_test_app() -> (
         db_pool,
         s3_client,
         redis_client: None, // No Redis client in tests
+        job_queue: None, // No job queue in tests
         video_clients: std::sync::Mutex::new(HashMap::new()),
         watchparty_clients: std::sync::Mutex::new(HashMap::new()),
     }));

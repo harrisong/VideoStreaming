@@ -8,7 +8,6 @@ use futures::{SinkExt, StreamExt};
 use serde_json::json;
 use tokio::time::{sleep, timeout};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use futures_util::stream::StreamExt as FuturesStreamExt;
 use tokio::net::TcpStream;
 use tokio::sync::oneshot;
 use std::time::Duration as StdDuration;
@@ -41,6 +40,7 @@ async fn setup_test_app() -> (
         db_pool,
         s3_client,
         redis_client: None, // No Redis client in tests
+        job_queue: None, // No job queue in tests
         video_clients: std::sync::Mutex::new(HashMap::new()),
         watchparty_clients: std::sync::Mutex::new(HashMap::new()),
     }));
@@ -399,7 +399,7 @@ async fn test_watchparty_websocket_communication() {
         .expect("Failed to build runtime");
     
     // Spawn the server in a separate thread with its own runtime
-    let server_thread = std::thread::spawn(move || {
+    let _server_thread = std::thread::spawn(move || {
         rt.block_on(async {
             let server = actix_web::HttpServer::new(move || {
                 App::new()
