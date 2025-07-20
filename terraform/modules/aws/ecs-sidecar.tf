@@ -148,12 +148,12 @@ resource "aws_ecs_task_definition" "app_sidecar" {
       healthCheck = {
         command = [
           "CMD-SHELL",
-          "curl -f http://localhost:5050/api/status && curl -f http://localhost:8080/api/ws/health || exit 1"
+          "curl -f http://localhost:5050/api/status || exit 1"
         ]
-        interval    = 30
-        timeout     = 15
-        retries     = 5
-        startPeriod = 120
+        interval    = 60
+        timeout     = 30
+        retries     = 3
+        startPeriod = 300
       }
 
       essential = true
