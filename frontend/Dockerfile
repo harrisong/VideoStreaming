@@ -26,7 +26,7 @@ FROM nginx:alpine
 # Copy built app from builder stage
 COPY --from=builder /app/build /usr/share/nginx/html
 
-# Copy nginx configuration
+# Copy nginx configuration for sidecar setup (port 3000 only)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Expose port 3000
