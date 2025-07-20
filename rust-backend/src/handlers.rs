@@ -147,7 +147,9 @@ async fn get_videos(state: web::Data<Arc<Mutex<AppState>>>) -> actix_web::HttpRe
             // Check for videos without duration and queue them for processing
             if let Some(ref job_queue) = state.job_queue {
                 info!("Job queue is available, checking videos for duration extraction");
-                let bucket = std::env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
+                let bucket = std::env::var("S3_BUCKET")
+                    .or_else(|_| std::env::var("MINIO_BUCKET"))
+                    .unwrap_or_else(|_| "videos".to_string());
                 
                 for video in &videos {
                     if video.duration.is_none() {
@@ -289,7 +291,9 @@ async fn stream_video(
         Ok(video) => {
             let s3_key = video.s3_key;
             
-            let bucket_name = env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
+            let bucket_name = env::var("S3_BUCKET")
+                .or_else(|_| env::var("MINIO_BUCKET"))
+                .unwrap_or_else(|_| "videos".to_string());
             let get_object_output = state.s3_client.get_object()
                 .bucket(bucket_name)
                 .key(s3_key)
@@ -490,7 +494,9 @@ async fn get_thumbnail(
         format!("thumbnails/{}", thumbnail_key)
     };
     
-    let bucket_name = env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
+    let bucket_name = env::var("S3_BUCKET")
+        .or_else(|_| env::var("MINIO_BUCKET"))
+        .unwrap_or_else(|_| "videos".to_string());
     let get_object_output = state.s3_client.get_object()
         .bucket(bucket_name)
         .key(s3_key)

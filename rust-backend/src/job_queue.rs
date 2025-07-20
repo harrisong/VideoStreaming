@@ -242,7 +242,9 @@ impl JobQueue {
         .fetch_all(&self.db_pool)
         .await?;
 
-        let bucket = std::env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
+        let bucket = std::env::var("S3_BUCKET")
+            .or_else(|_| std::env::var("MINIO_BUCKET"))
+            .unwrap_or_else(|_| "videos".to_string());
         
         for video in videos {
             // Check if S3 object exists before enqueueing

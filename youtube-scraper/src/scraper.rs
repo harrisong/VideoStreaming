@@ -259,7 +259,9 @@ impl YoutubeScraper {
     }
 
     async fn upload_to_minio(&self, video_data: &[u8], s3_key: &str) -> Result<(), String> {
-        let bucket_name = env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
+        let bucket_name = env::var("S3_BUCKET")
+            .or_else(|_| env::var("MINIO_BUCKET"))
+            .unwrap_or_else(|_| "videos".to_string());
         
         // Log the MinIO configuration for debugging
         info!("MinIO configuration:");
@@ -306,7 +308,9 @@ impl YoutubeScraper {
         
         // Generate a unique S3 key for the thumbnail
         let s3_key = format!("thumbnails/{}.jpg", Uuid::new_v4());
-        let bucket_name = env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
+        let bucket_name = env::var("S3_BUCKET")
+            .or_else(|_| env::var("MINIO_BUCKET"))
+            .unwrap_or_else(|_| "videos".to_string());
         
         // Log the MinIO configuration for debugging
         info!("MinIO configuration for thumbnail:");
