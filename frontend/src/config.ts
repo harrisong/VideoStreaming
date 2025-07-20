@@ -2,22 +2,22 @@
 // This allows the frontend to work with different domains while preserving ports
 
 const getApiBaseUrl = (): string => {
-  // In production, use the current domain without port (load balancer handles routing)
-  // In development, use localhost with port 5050
+  // In production, use the current domain without port (nginx/ALB handles routing)
+  // In development, use localhost with port 80 (nginx proxies to backend port 5050)
   if (process.env.NODE_ENV === 'production') {
     return window.location.origin;
   }
-  return 'http://localhost:5050';
+  return 'http://localhost';
 };
 
 const getWebSocketUrl = (): string => {
-  // In production, use the current domain with ws/wss protocol (ALB routes by path, not port)
-  // In development, use localhost with port 8080
+  // In production, use the current domain with ws/wss protocol (nginx/ALB proxies to backend)
+  // In development, use localhost with port 80 (nginx proxies to backend port 8080)
   if (process.env.NODE_ENV === 'production') {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}`;  // Use host (includes port if present) instead of hostname
   }
-  return 'ws://localhost:8080';
+  return 'ws://localhost';
 };
 
 export const API_CONFIG = {

@@ -492,7 +492,7 @@ resource "aws_cloudfront_distribution" "main" {
     custom_origin_config {
       http_port              = 80
       https_port             = 443
-      origin_protocol_policy = "http-only"
+      origin_protocol_policy = "https-only"
       origin_ssl_protocols   = ["TLSv1.2"]
     }
   }
@@ -769,11 +769,28 @@ resource "aws_lb_listener_rule" "websocket" {
       values = ["/api/ws/*"]
     }
   }
+}
+
+# Additional WebSocket listener rule for HTTP upgrade requests
+resource "aws_lb_listener_rule" "websocket_upgrade" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 40
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.websocket.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/ws/*"]
+    }
+  }
 
   condition {
     http_header {
-      http_header_name = "Connection"
-      values          = ["*Upgrade*"]
+      http_header_name = "Upgrade"
+      values          = ["websocket"]
     }
   }
 }

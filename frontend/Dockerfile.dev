@@ -1,4 +1,5 @@
-FROM node:18-alpine
+# Multi-stage build for development with nginx proxy
+FROM node:18-alpine as build
 
 # Set working directory
 WORKDIR /app
@@ -16,8 +17,20 @@ COPY tsconfig.json ./
 COPY tailwind.config.js ./
 COPY postcss.config.js ./
 
-# Expose port 3000 (React dev server default)
-EXPOSE 3000
+# Build the React app
+RUN npm run build
 
-# Start the React development server
-CMD ["npm", "start"]
+# Production stage with nginx
+FROM nginx:alpine
+
+# Copy built React app to nginx html directory
+COPY --from=build /app/build /usr/share/nginx/html
+
+# Copy nginx development configuration
+COPY nginx.dev.conf /etc/nginx/conf.d/default.conf
+
+# Expose port 80
+EXPOSE 80
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

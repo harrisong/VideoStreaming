@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile.dev
     platform: linux/amd64
     ports:
-      - "3000:3000"
+      - "80:80"
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
@@ -44,6 +44,7 @@ services:
       - MINIO_SECRET_KEY=minio123
       - MINIO_BUCKET=videos
       - REDIS_URL=redis://redis:6379
+      - CORS_ALLOWED_ORIGINS=http://localhost,http://localhost:80
     volumes:
       - cargo-registry:/usr/local/cargo/registry
       - cargo-git:/usr/local/cargo/git
