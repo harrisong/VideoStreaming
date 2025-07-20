@@ -101,30 +101,30 @@ impl JobQueue {
                 }
             };
             
-            info!("Processing duration extraction job for video ID {}", job.video_id);
+            let video_id = job.video_id; // Store video_id before moving job
+            info!("Processing duration extraction job for video ID {}", video_id);
             
             match self.extract_and_update_duration(job).await {
                 Ok(_) => {
                     info!("Successfully processed duration extraction job");
                 }
                 Err(e) => {
-                    error!("Failed to process duration extraction job: {:?}", e);
-                    
-                    // Implement retry logic - push the job back to the queue
-                    match serde_json::to_string(&job) {
-                        Ok(retry_job_json) => {
-                            info!("Re-enqueueing failed job for video ID {}", job.video_id);
-                            if let Err(push_err) = redis::cmd("LPUSH")
-                                .arg("duration_extraction_jobs")
-                                .arg(&retry_job_json)
-                                .query_async::<_, i32>(&mut conn)
-                                .await
-                            {
-                                error!("Failed to re-enqueue job: {:?}", push_err);
-                            }
-                        }
-                        Err(ser_err) => {
-                            error!("Failed to serialize job for retry: {:?}", ser_err);
+                    // Check if the error is due to S3 object not found (404)
+                    let error_string = format!("{:?}", e);
+                    if error_string.contains("NoSuchKey") || error_string.contains("404") {
+                        warn!("S3 object not found for video ID {}, not re-enqueueing job", video_id);
+                    } else {
+                        error!("Failed to process duration extraction job: {:?}", e);
+                        
+                        // Implement retry logic - push the original job back to the queue
+                        info!("Re-enqueueing failed job for video ID {}", video_id);
+                        if let Err(push_err) = redis::cmd("LPUSH")
+                            .arg("duration_extraction_jobs")
+                            .arg(&job_json)
+                            .query_async::<_, i32>(&mut conn)
+                            .await
+                        {
+                            error!("Failed to re-enqueue job: {:?}", push_err);
                         }
                     }
                 }
@@ -245,14 +245,36 @@ impl JobQueue {
         let bucket = std::env::var("MINIO_BUCKET").unwrap_or_else(|_| "videos".to_string());
         
         for video in videos {
-            let job = DurationExtractionJob {
-                video_id: video.id,
-                s3_key: video.s3_key.clone(),
-                bucket: bucket.clone(),
-            };
-            
-            if let Err(e) = self.enqueue_duration_extraction(job).await {
-                error!("Failed to enqueue job for video ID {}: {:?}", video.id, e);
+            // Check if S3 object exists before enqueueing
+            match self.s3_client
+                .head_object()
+                .bucket(&bucket)
+                .key(&video.s3_key)
+                .send()
+                .await
+            {
+                Ok(_) => {
+                    // Object exists, enqueue the job
+                    let job = DurationExtractionJob {
+                        video_id: video.id,
+                        s3_key: video.s3_key.clone(),
+                        bucket: bucket.clone(),
+                    };
+                    
+                    if let Err(e) = self.enqueue_duration_extraction(job).await {
+                        error!("Failed to enqueue job for video ID {}: {:?}", video.id, e);
+                    }
+                },
+                Err(e) => {
+                    // Check if it's a 404 error (NoSuchKey) by examining the error string
+                    let error_string = format!("{:?}", e);
+                    if error_string.contains("NoSuchKey") || error_string.contains("404") {
+                        warn!("S3 object {} does not exist for video ID {}, skipping job enqueueing", video.s3_key, video.id);
+                        continue;
+                    }
+                    // For other errors, log and continue
+                    error!("Failed to check S3 object existence for video ID {}: {:?}", video.id, e);
+                }
             }
         }
         
