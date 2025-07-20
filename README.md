@@ -1,10 +1,19 @@
 <div align="center">
-  <img src="logo.svg" alt="VibeStream" width="280" height="64">
+  <img src="logo.svg" alt="VibeStream Logo" width="200" height="46">
   
-  # VibeStream Platform
-
-  A comprehensive video streaming platform with frontend, backend, and YouTube scraping capabilities.
+  <h1>VibeStream Platform</h1>
+  
+  <p><em>A comprehensive video streaming platform with frontend, backend, and YouTube scraping capabilities.</em></p>
+  
+  <p>
+    <img src="https://img.shields.io/badge/Rust-1.88+-orange?style=flat-square&logo=rust" alt="Rust">
+    <img src="https://img.shields.io/badge/React-18+-blue?style=flat-square&logo=react" alt="React">
+    <img src="https://img.shields.io/badge/PostgreSQL-13+-blue?style=flat-square&logo=postgresql" alt="PostgreSQL">
+    <img src="https://img.shields.io/badge/Docker-Ready-blue?style=flat-square&logo=docker" alt="Docker">
+  </p>
 </div>
+
+---
 
 ## Project Structure
 

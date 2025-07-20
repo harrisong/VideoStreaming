@@ -1,19 +1,49 @@
 <svg width="140" height="32" viewBox="0 0 140 32" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="playGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+    <linearGradient id="primaryGradient" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#4f46e5" />
       <stop offset="100%" stop-color="#3730a3" />
     </linearGradient>
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#0891b2" />
+    </linearGradient>
+    <linearGradient id="dotGradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.4" />
+    </linearGradient>
+    <linearGradient id="dotGradient2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" stop-opacity="0.7" />
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.5" />
+    </linearGradient>
   </defs>
   
-  <!-- Play button icon -->
-  <g transform="translate(8, 8)">
-    <rect x="0" y="0" width="16" height="16" rx="3" fill="url(#playGradient)" />
-    <polygon points="6,5 6,11 11,8" fill="white" />
+  <!-- Animated streaming dots -->
+  <g transform="translate(8, 14)">
+    <!-- Dot 1 -->
+    <circle cx="2" cy="2" r="1.5" fill="url(#dotGradient1)">
+      <animate attributeName="opacity" values="0.3;1;0.6;0.3" dur="2s" repeatCount="indefinite" />
+    </circle>
+    
+    <!-- Dot 2 (center, larger) -->
+    <circle cx="8" cy="2" r="2" fill="url(#dotGradient2)">
+      <animate attributeName="opacity" values="0.4;1;0.4" dur="2s" repeatCount="indefinite" begin="0.3s" />
+      <animateTransform attributeName="transform" type="scale" values="0.8;1.2;0.8" dur="2s" repeatCount="indefinite" begin="0.3s" />
+    </circle>
+    
+    <!-- Dot 3 -->
+    <circle cx="14" cy="2" r="1.5" fill="url(#dotGradient1)">
+      <animate attributeName="opacity" values="0.3;1;0.6;0.3" dur="2s" repeatCount="indefinite" begin="0.6s" />
+    </circle>
   </g>
   
-  <!-- Text "VibeStream" -->
-  <g transform="translate(32, 10)" fill="#111827" font-size="16" font-family="system-ui, -apple-system, sans-serif" font-weight="700">
-    <text x="0" y="12">VibeStream</text>
+  <!-- Text "Vibe" with primary gradient -->
+  <g transform="translate(32, 10)">
+    <text x="0" y="16" font-family="Satoshi, system-ui, -apple-system, sans-serif" font-size="20" font-weight="600" letter-spacing="-0.02em" fill="url(#primaryGradient)">Vibe</text>
+  </g>
+  
+  <!-- Text "Stream" with accent gradient -->
+  <g transform="translate(78, 10)">
+    <text x="0" y="16" font-family="Satoshi, system-ui, -apple-system, sans-serif" font-size="20" font-weight="600" letter-spacing="-0.02em" fill="url(#accentGradient)">Stream</text>
   </g>
 </svg>
