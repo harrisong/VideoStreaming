@@ -177,6 +177,29 @@ apply_terraform() {
     print_success "Terraform deployment completed."
 }
 
+# Force ECS service deployment
+force_ecs_deployment() {
+    print_status "Forcing ECS service deployment to ensure latest containers are running..."
+    
+    # Get the ECS cluster name and service name
+    local cluster_name=$(terraform output -raw ecs_cluster_name 2>/dev/null || echo "${ENVIRONMENT}-video-streaming-cluster")
+    local service_name="${ENVIRONMENT}-video-streaming-sidecar"
+    
+    # Force new deployment
+    if aws ecs update-service \
+        --cluster "$cluster_name" \
+        --service "$service_name" \
+        --force-new-deployment \
+        --region "$AWS_REGION" > /dev/null 2>&1; then
+        print_success "ECS service deployment forced successfully."
+        print_status "New containers will be deployed with the latest images."
+    else
+        print_warning "Failed to force ECS service deployment. The service may still be starting up."
+        print_status "You can manually force deployment later with:"
+        print_status "aws ecs update-service --cluster $cluster_name --service $service_name --force-new-deployment --region $AWS_REGION"
+    fi
+}
+
 # Get deployment outputs
 get_outputs() {
     print_status "Getting deployment outputs..."
@@ -249,6 +272,7 @@ main() {
     
     if [[ $CONFIRM =~ ^[Yy]$ ]]; then
         apply_terraform
+        force_ecs_deployment
         get_outputs
     else
         print_status "Deployment cancelled."
