@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import EmojiPicker from 'emoji-picker-react';
+import EmojiPicker from './EmojiPicker';
 import {
   Box,
   Typography,
@@ -7,7 +7,6 @@ import {
   Button,
   IconButton,
   Collapse,
-  Divider,
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -140,10 +139,8 @@ const CommentSection: React.FC<CommentSectionProps> = ({ videoId, currentTime })
     }
   };
 
-  const onEmojiClick = (emojiObject: any) => {
-    // Use the emoji character, not the image
-    const emojiChar = emojiObject.emoji || emojiObject.native || emojiObject.shortcodes;
-    setNewComment(prev => prev + emojiChar);
+  const onEmojiClick = (emoji: string) => {
+    setNewComment(prev => prev + emoji);
     setShowEmojiPicker(false);
   };
 
@@ -293,6 +290,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({ videoId, currentTime })
               <Box sx={{ position: 'absolute', zIndex: 10, mt: 1 }}>
                 <EmojiPicker 
                   onEmojiClick={onEmojiClick}
+                  onClose={() => setShowEmojiPicker(false)}
                 />
               </Box>
             )}
