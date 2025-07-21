@@ -38,7 +38,7 @@ variable "server_count" {
 }
 
 variable "server_size" {
-  description = "ECS task size (small, medium, large)"
+  description = "Server/instance size (small, medium, large)"
   type        = string
   default     = "small"
   
@@ -46,6 +46,12 @@ variable "server_size" {
     condition     = contains(["small", "medium", "large"], var.server_size)
     error_message = "Server size must be one of: small, medium, large."
   }
+}
+
+variable "instance_type" {
+  description = "Instance type (alias for server_size for compatibility)"
+  type        = string
+  default     = ""
 }
 
 variable "enable_load_balancer" {

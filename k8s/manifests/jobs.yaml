@@ -1,0 +1,85 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: video-streaming-db-migration
+  namespace: video-streaming
+  labels:
+    app: video-streaming-app
+    component: db-migration
+spec:
+  template:
+    metadata:
+      labels:
+        app: video-streaming-app
+        component: db-migration
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: db-migration
+        image: PLACEHOLDER_ECR_REGISTRY/PLACEHOLDER_ENVIRONMENT-video-streaming-backend:latest
+        command: ["./video_streaming_backend", "--migrate"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: video-streaming-secrets
+              key: DATABASE_URL
+        - name: RUST_LOG
+          value: "info"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      serviceAccountName: video-streaming-sa
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: video-streaming-scraper
+  namespace: video-streaming
+  labels:
+    app: video-streaming-app
+    component: scraper
+spec:
+  template:
+    metadata:
+      labels:
+        app: video-streaming-app
+        component: scraper
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: scraper
+        image: PLACEHOLDER_ECR_REGISTRY/PLACEHOLDER_ENVIRONMENT-video-streaming-scraper:latest
+        command: ["youtube_scraper", "--url", "PLACEHOLDER_URL", "--user-id", "1"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: video-streaming-secrets
+              key: DATABASE_URL
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: video-streaming-secrets
+              key: AWS_REGION
+        - name: MINIO_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: video-streaming-secrets
+              key: S3_BUCKET
+        - name: RUST_LOG
+          value: "info"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      serviceAccountName: video-streaming-sa
+  # Don't run automatically - this is a template for manual execution
+  suspend: true

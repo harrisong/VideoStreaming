@@ -24,32 +24,19 @@ echo "Building and pushing sidecar containers..."
 echo "Logging in to ECR..."
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
 
-# Create ECR repositories if they don't exist (matching Terraform naming)
+# Create ECR repositories if they don't exist (only for active deployment)
 echo "Creating ECR repositories if they don't exist..."
 ENVIRONMENT=${ENVIRONMENT:-prod}
 
-aws ecr describe-repositories --repository-names "${ENVIRONMENT}-video-streaming-nginx-sidecar" --region $AWS_REGION --output text >/dev/null 2>&1 || \
-    aws ecr create-repository --repository-name "${ENVIRONMENT}-video-streaming-nginx-sidecar" --region $AWS_REGION --output text >/dev/null
-
-aws ecr describe-repositories --repository-names "${ENVIRONMENT}-video-streaming-frontend-sidecar" --region $AWS_REGION --output text >/dev/null 2>&1 || \
-    aws ecr create-repository --repository-name "${ENVIRONMENT}-video-streaming-frontend-sidecar" --region $AWS_REGION --output text >/dev/null
-
+# Only create repositories that are actually used (no sidecar repos for EKS)
 aws ecr describe-repositories --repository-names "${ENVIRONMENT}-video-streaming-backend" --region $AWS_REGION --output text >/dev/null 2>&1 || \
     aws ecr create-repository --repository-name "${ENVIRONMENT}-video-streaming-backend" --region $AWS_REGION --output text >/dev/null
 
-# Build and push nginx sidecar (ECS version with localhost)
-echo "Building nginx sidecar container for ECS..."
-docker build --platform linux/amd64 -f ./nginx-sidecar/Dockerfile -t nginx-sidecar:latest ./nginx-sidecar/
-docker tag nginx-sidecar:latest $ECR_REGISTRY/${ENVIRONMENT}-video-streaming-nginx-sidecar:latest
-echo "Pushing nginx sidecar container..."
-docker push $ECR_REGISTRY/${ENVIRONMENT}-video-streaming-nginx-sidecar:latest
+aws ecr describe-repositories --repository-names "${ENVIRONMENT}-video-streaming-frontend" --region $AWS_REGION --output text >/dev/null 2>&1 || \
+    aws ecr create-repository --repository-name "${ENVIRONMENT}-video-streaming-frontend" --region $AWS_REGION --output text >/dev/null
 
-# Build and push frontend sidecar
-echo "Building frontend sidecar container..."
-docker build --platform linux/amd64 -f ./frontend/Dockerfile -t frontend-sidecar:latest ./frontend/
-docker tag frontend-sidecar:latest $ECR_REGISTRY/${ENVIRONMENT}-video-streaming-frontend-sidecar:latest
-echo "Pushing frontend sidecar container..."
-docker push $ECR_REGISTRY/${ENVIRONMENT}-video-streaming-frontend-sidecar:latest
+aws ecr describe-repositories --repository-names "${ENVIRONMENT}-video-streaming-scraper" --region $AWS_REGION --output text >/dev/null 2>&1 || \
+    aws ecr create-repository --repository-name "${ENVIRONMENT}-video-streaming-scraper" --region $AWS_REGION --output text >/dev/null
 
 # Build and push backend
 echo "Building backend container..."
@@ -57,6 +44,20 @@ docker build --platform linux/amd64 -t rust-backend:latest ./rust-backend/
 docker tag rust-backend:latest $ECR_REGISTRY/${ENVIRONMENT}-video-streaming-backend:latest
 echo "Pushing backend container..."
 docker push $ECR_REGISTRY/${ENVIRONMENT}-video-streaming-backend:latest
+
+# Build and push frontend (standalone, not sidecar)
+echo "Building frontend container..."
+docker build --platform linux/amd64 -f ./frontend/Dockerfile -t frontend:latest ./frontend/
+docker tag frontend:latest $ECR_REGISTRY/${ENVIRONMENT}-video-streaming-frontend:latest
+echo "Pushing frontend container..."
+docker push $ECR_REGISTRY/${ENVIRONMENT}-video-streaming-frontend:latest
+
+# Build and push scraper
+echo "Building scraper container..."
+docker build --platform linux/amd64 -t youtube-scraper:latest ./youtube-scraper/
+docker tag youtube-scraper:latest $ECR_REGISTRY/${ENVIRONMENT}-video-streaming-scraper:latest
+echo "Pushing scraper container..."
+docker push $ECR_REGISTRY/${ENVIRONMENT}-video-streaming-scraper:latest
 
 echo "All containers built and pushed successfully!"
 echo ""

@@ -275,6 +275,14 @@ resource "aws_security_group" "ecs" {
     security_groups = [aws_security_group.alb.id]
   }
 
+  # Allow ALB to reach EKS NodePort
+  ingress {
+    from_port       = 30080
+    to_port         = 30080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -318,6 +326,19 @@ resource "aws_security_group" "rds" {
   }
 }
 
+# Additional security group rule to allow EKS access to RDS
+resource "aws_security_group_rule" "rds_from_eks" {
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+  security_group_id        = aws_security_group.rds.id
+  description              = "Allow EKS cluster to access RDS"
+
+  depends_on = [aws_eks_cluster.main]
+}
+
 resource "aws_security_group" "elasticache" {
   name_prefix = "${var.environment}-video-streaming-redis-"
   vpc_id      = aws_vpc.main.id
@@ -336,6 +357,19 @@ resource "aws_security_group" "elasticache" {
   lifecycle {
     create_before_destroy = true
   }
+}
+
+# Additional security group rule to allow EKS access to Redis
+resource "aws_security_group_rule" "redis_from_eks" {
+  type                     = "ingress"
+  from_port                = 6379
+  to_port                  = 6379
+  protocol                 = "tcp"
+  source_security_group_id = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+  security_group_id        = aws_security_group.elasticache.id
+  description              = "Allow EKS cluster to access Redis"
+
+  depends_on = [aws_eks_cluster.main]
 }
 
 # RDS PostgreSQL Database
@@ -659,6 +693,29 @@ resource "aws_lb_listener" "main" {
   }
 }
 
+# Placeholder target group (kept for compatibility)
+resource "aws_lb_target_group" "placeholder" {
+  name        = "${var.environment}-video-streaming-tg"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "instance"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher             = "200"
+    path                = "/"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 10
+    unhealthy_threshold = 3
+  }
+
+  tags = var.common_tags
+}
+
 resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.main.arn
   port              = "443"
@@ -668,11 +725,13 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.nginx_proxy.arn
+    target_group_arn = aws_lb_target_group.eks_app.arn
   }
 }
 
-# ECS Cluster
+# ECS Cluster (DISABLED - Using EKS instead)
+# Uncomment this section if you want to use ECS instead of EKS
+/*
 resource "aws_ecs_cluster" "main" {
   name = "${var.environment}-video-streaming"
 
@@ -769,78 +828,10 @@ resource "aws_iam_role_policy" "ecs_task" {
     ]
   })
 }
+*/
 
-# Database Migration Task Definition
-resource "aws_ecs_task_definition" "db_migration" {
-  family                   = "${var.environment}-video-streaming-db-migration"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = 512
-  memory                   = 1024
-  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
-  task_role_arn           = aws_iam_role.ecs_task.arn
-
-  container_definitions = jsonencode([
-    {
-      name  = "db-migration"
-      image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com/${var.environment}-video-streaming-backend:latest"
-      
-      # Use the backend binary with migration flag
-      command = [
-        "./video_streaming_backend", "--migrate"
-      ]
-
-      environment = [
-        {
-          name  = "DATABASE_URL"
-          value = "postgres://postgres:${random_password.db_password.result}@${aws_db_instance.main.endpoint}/video_streaming_db?sslmode=require"
-        },
-        {
-          name  = "RUST_LOG"
-          value = "info"
-        }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.ecs.name
-          awslogs-region        = var.region
-          awslogs-stream-prefix = "db-migration"
-        }
-      }
-
-      essential = true
-    }
-  ])
-
-  tags = var.common_tags
-}
-
-# Run database migration as a one-time task
-resource "null_resource" "db_migration" {
-  depends_on = [
-    aws_db_instance.main,
-    aws_ecs_cluster.main,
-    aws_ecs_task_definition.db_migration
-  ]
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      aws ecs run-task \
-        --cluster ${aws_ecs_cluster.main.name} \
-        --task-definition ${aws_ecs_task_definition.db_migration.arn} \
-        --launch-type FARGATE \
-        --network-configuration "awsvpcConfiguration={subnets=[${join(",", aws_subnet.private[*].id)}],securityGroups=[${aws_security_group.ecs.id}],assignPublicIp=DISABLED}" \
-        --region ${var.region}
-    EOT
-  }
-
-  triggers = {
-    db_endpoint = aws_db_instance.main.endpoint
-    task_def    = aws_ecs_task_definition.db_migration.revision
-  }
-}
+# Database Migration (DISABLED - Using Kubernetes Jobs instead)
+# Database migration is now handled by Kubernetes Jobs in the EKS deployment
 
 
 # ECR Repositories
@@ -877,112 +868,13 @@ resource "aws_ecr_repository" "scraper" {
   tags = var.common_tags
 }
 
-# On-Demand YouTube Scraper Task Definition
-resource "aws_ecs_task_definition" "scraper" {
-  family                   = "${var.environment}-video-streaming-scraper"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = 1024  # 1 vCPU
-  memory                   = 2048  # 2GB RAM (needed for video processing)
-  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
-  task_role_arn           = aws_iam_role.scraper_task.arn
+# Scraper functionality (DISABLED - Using Kubernetes Jobs instead)
+# Scraper functionality is now handled by Kubernetes Jobs in the EKS deployment
 
-  container_definitions = jsonencode([
-    {
-      name  = "scraper"
-      image = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com/${var.environment}-video-streaming-scraper:latest"
-      
-      # Run in CLI mode for one-time execution
-      command = ["youtube_scraper", "--url", "PLACEHOLDER_URL", "--user-id", "1"]
+# Lambda function to trigger scraper tasks on-demand (DISABLED - Using Kubernetes Jobs instead)
+# Scraper functionality is now handled by Kubernetes Jobs in the EKS deployment
 
-      environment = [
-        {
-          name  = "DATABASE_URL"
-          value = "postgres://postgres:${random_password.db_password.result}@${aws_db_instance.main.endpoint}/video_streaming_db"
-        },
-        {
-          name  = "AWS_REGION"
-          value = var.region
-        },
-        {
-          name  = "MINIO_BUCKET"
-          value = aws_s3_bucket.videos.bucket
-        },
-        {
-          name  = "RUST_LOG"
-          value = "info"
-        }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.scraper.name
-          awslogs-region        = var.region
-          awslogs-stream-prefix = "scraper"
-        }
-      }
-
-      essential = true
-    }
-  ])
-
-  tags = var.common_tags
-}
-
-# CloudWatch Log Group for Scraper
-resource "aws_cloudwatch_log_group" "scraper" {
-  name              = "/ecs/${var.environment}-video-streaming-scraper"
-  retention_in_days = 7  # Keep logs for 7 days only to save costs
-
-  tags = var.common_tags
-}
-
-# IAM Role for Scraper Task (with S3 permissions)
-resource "aws_iam_role" "scraper_task" {
-  name = "${var.environment}-video-streaming-scraper-task"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-      }
-    ]
-  })
-
-  tags = var.common_tags
-}
-
-resource "aws_iam_role_policy" "scraper_task" {
-  name = "${var.environment}-video-streaming-scraper-task-policy"
-  role = aws_iam_role.scraper_task.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          aws_s3_bucket.videos.arn,
-          "${aws_s3_bucket.videos.arn}/*"
-        ]
-      }
-    ]
-  })
-}
-
-# Lambda function to trigger scraper tasks on-demand
+# Lambda function for scraper trigger (kept for API compatibility)
 resource "aws_lambda_function" "scraper_trigger" {
   filename         = "scraper_trigger.zip"
   function_name    = "${var.environment}-video-streaming-scraper-trigger"
@@ -990,15 +882,6 @@ resource "aws_lambda_function" "scraper_trigger" {
   handler         = "index.handler"
   runtime         = "python3.9"
   timeout         = 60
-
-  environment {
-    variables = {
-      ECS_CLUSTER_NAME = aws_ecs_cluster.main.name
-      TASK_DEFINITION  = aws_ecs_task_definition.scraper.arn
-      SUBNET_IDS       = join(",", aws_subnet.private[*].id)
-      SECURITY_GROUP   = aws_security_group.ecs.id
-    }
-  }
 
   depends_on = [data.archive_file.scraper_trigger_zip]
 
@@ -1144,25 +1027,6 @@ resource "aws_iam_role_policy" "lambda_scraper_trigger" {
           "logs:PutLogEvents"
         ]
         Resource = "arn:aws:logs:*:*:*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "ecs:RunTask",
-          "ecs:DescribeTasks",
-          "ecs:TagResource"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "iam:PassRole"
-        ]
-        Resource = [
-          aws_iam_role.ecs_task_execution.arn,
-          aws_iam_role.scraper_task.arn
-        ]
       }
     ]
   })
@@ -1251,12 +1115,14 @@ resource "aws_api_gateway_deployment" "scraper_deployment" {
   ]
 
   rest_api_id = aws_api_gateway_rest_api.scraper_api.id
-  stage_name  = "prod"
 
   lifecycle {
     create_before_destroy = true
   }
 }
+
+# Note: API Gateway stage is managed by the deployment resource
+# to avoid conflicts with existing deployments
 
 resource "aws_lambda_permission" "api_gateway_lambda" {
   statement_id  = "AllowExecutionFromAPIGateway"
@@ -1289,16 +1155,15 @@ output "load_balancer_ip" {
 }
 
 output "ssh_connection_commands" {
-  description = "ECS Exec commands"
+  description = "kubectl commands for EKS"
   value = [
-    "aws ecs execute-command --cluster ${aws_ecs_cluster.main.name} --task <task-id> --container backend --interactive --command '/bin/bash'"
+    "kubectl exec -it deployment/video-streaming-app -n video-streaming -c backend -- /bin/bash"
   ]
 }
 
 output "server_info" {
   description = "Service information"
   value = {
-    ecs_cluster    = aws_ecs_cluster.main.name
     database       = aws_db_instance.main.endpoint
     redis          = aws_elasticache_replication_group.main.primary_endpoint_address
     s3_videos      = aws_s3_bucket.videos.bucket
@@ -1336,11 +1201,9 @@ output "s3_buckets" {
 output "ecr_repositories" {
   description = "ECR repository URLs"
   value = {
-    backend           = aws_ecr_repository.backend.repository_url
-    frontend          = aws_ecr_repository.frontend.repository_url
-    frontend_sidecar  = aws_ecr_repository.frontend_sidecar.repository_url
-    nginx_sidecar     = aws_ecr_repository.nginx_sidecar.repository_url
-    scraper           = aws_ecr_repository.scraper.repository_url
+    backend  = aws_ecr_repository.backend.repository_url
+    frontend = aws_ecr_repository.frontend.repository_url
+    scraper  = aws_ecr_repository.scraper.repository_url
   }
 }
 

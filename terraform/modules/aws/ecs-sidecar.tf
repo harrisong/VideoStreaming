@@ -1,4 +1,5 @@
-# ECS Task Definition with nginx sidecar pattern
+# ECS Task Definition with nginx sidecar pattern (DISABLED - Using EKS instead)
+/*
 resource "aws_ecs_task_definition" "app_sidecar" {
   family                   = "${var.environment}-video-streaming-sidecar"
   network_mode             = "awsvpc"
@@ -315,6 +316,7 @@ resource "aws_ecs_service" "main_sidecar" {
 resource "aws_ecr_repository" "nginx_sidecar" {
   name                 = "${var.environment}-video-streaming-nginx-sidecar"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -327,6 +329,7 @@ resource "aws_ecr_repository" "nginx_sidecar" {
 resource "aws_ecr_repository" "frontend_sidecar" {
   name                 = "${var.environment}-video-streaming-frontend-sidecar"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -334,3 +337,8 @@ resource "aws_ecr_repository" "frontend_sidecar" {
 
   tags = var.common_tags
 }
+*/
+
+# ECS Sidecar configuration is disabled for EKS deployment
+# To use ECS instead of EKS, uncomment the above resources and 
+# uncomment the ECS resources in main.tf
