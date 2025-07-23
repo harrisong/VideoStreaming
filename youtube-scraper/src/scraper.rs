@@ -14,6 +14,7 @@ use reqwest;
 pub struct YoutubeScraper {
     db_pool: PgPool,
     s3_client: S3Client,
+    cookies_file: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -50,7 +51,12 @@ impl YoutubeScraper {
         Self {
             db_pool,
             s3_client,
+            cookies_file: None,
         }
+    }
+
+    pub fn set_cookies_file(&mut self, cookies_file: String) {
+        self.cookies_file = Some(cookies_file);
     }
     
     pub async fn search_videos(&self, query: &str, max_results: i32) -> Result<Vec<String>, String> {
@@ -217,27 +223,48 @@ impl YoutubeScraper {
         // Create a temporary file path
         let output_path = format!("/tmp/videos/{}.mp4", Uuid::new_v4());
         
+        // Build yt-dlp command with optional cookies
+        let mut cmd = Command::new("/opt/venv/bin/yt-dlp");
+        cmd.args(&[
+            "-f", "best", // Get the best quality
+            "-o", &output_path,
+        ]);
+        
+        // Add cookies file if provided (copy to writable location first)
+        if let Some(cookies_file) = &self.cookies_file {
+            info!("Using cookies file: {}", cookies_file);
+            
+            // Copy cookies to a writable location to avoid read-only filesystem issues
+            let writable_cookies = "/tmp/writable_cookies.txt";
+            if let Err(e) = std::fs::copy(cookies_file, writable_cookies) {
+                info!("Failed to copy cookies file, proceeding without cookies: {}", e);
+            } else {
+                cmd.args(&["--cookies", writable_cookies]);
+            }
+        }
+        
+        cmd.arg(&format!("https://www.youtube.com/watch?v={}", video_id));
+        
         // Run yt-dlp to download the video
-        let status = Command::new("/opt/venv/bin/yt-dlp")
-            .args(&[
-                "-f", "best", // Get the best quality
-                "-o", &output_path,
-                &format!("https://www.youtube.com/watch?v={}", video_id),
-            ])
-            .status()
+        let status = cmd.status()
             .map_err(|e| format!("Failed to execute yt-dlp: {}", e))?;
         
         if !status.success() {
             return Err(format!("yt-dlp failed with exit code: {:?}", status.code()));
         }
         
-        // Get the video title
-        let output = Command::new("/opt/venv/bin/yt-dlp")
-            .args(&[
-                "--get-title",
-                &format!("https://www.youtube.com/watch?v={}", video_id),
-            ])
-            .output()
+        // Get the video title with cookies if available
+        let mut title_cmd = Command::new("/opt/venv/bin/yt-dlp");
+        title_cmd.arg("--get-title");
+        
+        // Add cookies file for title retrieval too
+        if let Some(cookies_file) = &self.cookies_file {
+            title_cmd.args(&["--cookies", cookies_file]);
+        }
+        
+        title_cmd.arg(&format!("https://www.youtube.com/watch?v={}", video_id));
+        
+        let output = title_cmd.output()
             .map_err(|e| format!("Failed to get video title: {}", e))?;
         
         let title = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -263,17 +290,16 @@ impl YoutubeScraper {
             .or_else(|_| env::var("MINIO_BUCKET"))
             .unwrap_or_else(|_| "videos".to_string());
         
-        // Log the MinIO configuration for debugging
-        info!("MinIO configuration:");
-        info!("  Endpoint: {}", std::env::var("MINIO_ENDPOINT").unwrap_or_else(|_| "Not set".to_string()));
-        info!("  Access Key: {}", std::env::var("MINIO_ACCESS_KEY").unwrap_or_else(|_| "Not set".to_string()));
-        info!("  Secret Key: {}", std::env::var("MINIO_SECRET_KEY").unwrap_or_else(|_| "Not set".to_string()));
+        // Log the S3 configuration for debugging
+        info!("S3 configuration:");
         info!("  Bucket: {}", bucket_name);
+        info!("  Region: {}", std::env::var("AWS_REGION").unwrap_or_else(|_| "Not set".to_string()));
+        info!("  Key: {}", s3_key);
         
         // Create a ByteStream from the video data
         let byte_stream = ByteStream::from(video_data.to_vec());
         
-        // Upload the video to MinIO
+        // Upload the video to S3
         match self.s3_client.put_object()
             .bucket(&bucket_name)
             .key(s3_key)
@@ -283,7 +309,7 @@ impl YoutubeScraper {
             .await
         {
             Ok(_) => Ok(()),
-            Err(e) => Err(format!("Failed to upload to MinIO: {}", e)),
+            Err(e) => Err(format!("Failed to upload to S3: {}", e)),
         }
     }
 
@@ -312,14 +338,13 @@ impl YoutubeScraper {
             .or_else(|_| env::var("MINIO_BUCKET"))
             .unwrap_or_else(|_| "videos".to_string());
         
-        // Log the MinIO configuration for debugging
-        info!("MinIO configuration for thumbnail:");
-        info!("  Endpoint: {}", std::env::var("MINIO_ENDPOINT").unwrap_or_else(|_| "Not set".to_string()));
-        info!("  Access Key: {}", std::env::var("MINIO_ACCESS_KEY").unwrap_or_else(|_| "Not set".to_string()));
-        info!("  Secret Key: {}", std::env::var("MINIO_SECRET_KEY").unwrap_or_else(|_| "Not set".to_string()));
+        // Log the S3 configuration for debugging
+        info!("S3 configuration for thumbnail:");
         info!("  Bucket: {}", bucket_name);
+        info!("  Region: {}", std::env::var("AWS_REGION").unwrap_or_else(|_| "Not set".to_string()));
+        info!("  Key: {}", s3_key);
         
-        // Upload the thumbnail to MinIO
+        // Upload the thumbnail to S3
         match self.s3_client.put_object()
             .bucket(&bucket_name)
             .key(&s3_key)
@@ -329,7 +354,7 @@ impl YoutubeScraper {
             .await
         {
             Ok(_) => Ok(s3_key),
-            Err(e) => Err(format!("Failed to upload thumbnail to MinIO: {}", e)),
+            Err(e) => Err(format!("Failed to upload thumbnail to S3: {}", e)),
         }
     }
 

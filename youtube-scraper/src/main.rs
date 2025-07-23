@@ -121,6 +121,10 @@ struct Args {
     /// User ID to associate with the video
     #[arg(short = 'i', long)]
     user_id: Option<i32>,
+
+    /// Path to cookies file for yt-dlp
+    #[arg(short, long)]
+    cookies: Option<String>,
 }
 
 #[tokio::main]
@@ -174,7 +178,13 @@ async fn main() -> std::io::Result<()> {
     } else if let Some(url) = args.url {
         // Run as CLI tool
         info!("Running YouTube scraper in CLI mode");
-        let scraper = scraper::YoutubeScraper::new(db_pool, s3_client);
+        let mut scraper = scraper::YoutubeScraper::new(db_pool, s3_client);
+        
+        // Set cookies file if provided
+        if let Some(cookies_path) = args.cookies {
+            scraper.set_cookies_file(cookies_path);
+        }
+        
         let request = scraper::ScrapeRequest {
             youtube_url: url,
             title: None,
@@ -210,27 +220,35 @@ async fn init_s3_client() -> S3Client {
     let sdk_config = aws_config::from_env().load().await;
     let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
     
+    // Check if we're in local development mode (MinIO)
     if let Ok(endpoint) = std::env::var("MINIO_ENDPOINT") {
+        log::info!("Using MinIO endpoint: {}", endpoint);
         s3_config_builder = s3_config_builder.endpoint_url(endpoint).force_path_style(true);
+        
+        // Set MinIO credentials explicitly for local development
+        let access_key = std::env::var("MINIO_ACCESS_KEY").unwrap_or_else(|_| "minio".to_string());
+        let secret_key = std::env::var("MINIO_SECRET_KEY").unwrap_or_else(|_| "minio123".to_string());
+        let credentials = Credentials::new(
+            access_key,
+            secret_key,
+            None, // session_token
+            None, // expires_after
+            "env", // provider_name
+        );
+        s3_config_builder = s3_config_builder.credentials_provider(credentials);
+    } else {
+        // Production mode - use AWS S3 with IAM roles (ECS task role)
+        log::info!("Using AWS S3 with IAM role credentials");
+        // No need to set credentials explicitly - ECS task role will be used
     }
     
-    // Set MinIO credentials explicitly
-    let access_key = std::env::var("MINIO_ACCESS_KEY").unwrap_or_else(|_| "minio".to_string());
-    let secret_key = std::env::var("MINIO_SECRET_KEY").unwrap_or_else(|_| "minio123".to_string());
-    let credentials = Credentials::new(
-        access_key,
-        secret_key,
-        None, // session_token
-        None, // expires_after
-        "env", // provider_name
-    );
-    s3_config_builder = s3_config_builder.credentials_provider(credentials);
-    
+    // Set region
     if let Some(region) = sdk_config.region() {
         s3_config_builder = s3_config_builder.region(region.clone());
     } else {
-        // Default to us-east-1 if no region is set
-        s3_config_builder = s3_config_builder.region(Region::new("us-east-1"));
+        // Default to us-west-2 for AWS deployment
+        let aws_region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-west-2".to_string());
+        s3_config_builder = s3_config_builder.region(Region::new(aws_region));
     };
 
     let s3_config = s3_config_builder.build();
