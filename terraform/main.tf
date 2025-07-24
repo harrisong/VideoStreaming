@@ -167,22 +167,33 @@ output "ssh_connection_commands" {
 
 output "aws_resources" {
   description = "AWS resource information"
-  value       = module.aws.server_info
+  value = {
+    database       = module.aws.database_endpoint
+    redis          = module.aws.redis_endpoint
+    s3_videos      = module.aws.s3_buckets.videos
+    s3_static      = module.aws.s3_buckets.static
+    cloudfront     = module.aws.cloudfront_domain
+    ecr_backend    = module.aws.ecr_repositories.backend
+    ecr_frontend   = module.aws.ecr_repositories.frontend
+    ecr_scraper    = module.aws.ecr_repositories.scraper
+    scraper_api    = module.aws.scraper_api_url
+  }
 }
 
-output "ecr_repositories" {
-  description = "ECR repository URLs for Docker images"
-  value       = module.aws.ecr_repositories
-}
-
-output "scraper_api_url" {
-  description = "API Gateway URL for triggering scraper"
-  value       = module.aws.scraper_api_url
+output "video_streaming_service_account_role_arn" {
+  description = "IAM role ARN for video streaming service account"
+  value       = module.aws.video_streaming_service_account_role_arn
 }
 
 output "database_endpoint" {
   description = "RDS database endpoint"
   value       = module.aws.database_endpoint
+}
+
+output "database_password" {
+  description = "RDS database password"
+  value       = module.aws.database_password 
+  sensitive   = true
 }
 
 output "s3_buckets" {

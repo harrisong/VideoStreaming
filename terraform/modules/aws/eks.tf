@@ -192,6 +192,97 @@ resource "aws_iam_role_policy" "eks_node_group_s3" {
   })
 }
 
+# IAM Role for Service Account (IRSA) for video streaming pods
+resource "aws_iam_role" "video_streaming_service_account" {
+  name = "${var.environment}-video-streaming-service-account-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.eks.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" = "system:serviceaccount:video-streaming:video-streaming-sa"
+            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" = "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = var.common_tags
+}
+
+# IAM policy for video streaming service account (S3, RDS, and Redis access)
+resource "aws_iam_role_policy" "video_streaming_service_account_policy" {
+  name = "${var.environment}-video-streaming-service-account-policy"
+  role = aws_iam_role.video_streaming_service_account.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.videos.arn,
+          "${aws_s3_bucket.videos.arn}/*",
+          aws_s3_bucket.static.arn,
+          "${aws_s3_bucket.static.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "rds:DescribeDBInstances",
+          "rds:DescribeDBClusters",
+          "rds:Connect"
+        ]
+        Resource = [
+          aws_db_instance.main.arn,
+          "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.main.identifier}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticache:DescribeCacheClusters",
+          "elasticache:DescribeReplicationGroups",
+          "elasticache:DescribeCacheSubnetGroups"
+        ]
+        Resource = [
+          aws_elasticache_replication_group.main.arn
+        ]
+      }
+    ]
+  })
+}
+
+# OIDC Identity Provider for EKS
+data "tls_certificate" "eks" {
+  url = aws_eks_cluster.main.identity[0].oidc[0].issuer
+}
+
+resource "aws_iam_openid_connect_provider" "eks" {
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
+  url             = aws_eks_cluster.main.identity[0].oidc[0].issuer
+
+  tags = merge(var.common_tags, {
+    Name = "${var.environment}-video-streaming-eks-oidc"
+  })
+}
+
 # EKS Add-ons
 resource "aws_eks_addon" "vpc_cni" {
   cluster_name = aws_eks_cluster.main.name

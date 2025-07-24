@@ -66,11 +66,6 @@ spec:
             secretKeyRef:
               name: video-streaming-secrets
               key: AWS_REGION
-        - name: MINIO_BUCKET
-          valueFrom:
-            secretKeyRef:
-              name: video-streaming-secrets
-              key: S3_BUCKET
         - name: RUST_LOG
           value: "info"
         resources:

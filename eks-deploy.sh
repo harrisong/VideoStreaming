@@ -237,9 +237,9 @@ get_terraform_outputs() {
     # Try to get database password, if not available, generate a new one
     if ! DATABASE_PASSWORD=$(terraform output -raw database_password 2>/dev/null); then
         print_warning "Database password not found in Terraform outputs, using temporary password..."
-        DATABASE_PASSWORD="temp_password_$(openssl rand -hex 8)"
         print_warning "Using temporary database password. You may need to reset the RDS password manually."
         print_warning "Run ./fix-database-password.sh to set a proper password."
+        exit 1
     fi
     
     # Try to get Redis endpoint from multiple possible outputs
@@ -253,6 +253,12 @@ get_terraform_outputs() {
     
     if ! S3_BUCKET=$(terraform output -json s3_buckets 2>/dev/null | jq -r '.videos'); then
         print_error "Failed to get S3 bucket from Terraform outputs"
+        exit 1
+    fi
+    
+    # Get service account IAM role ARN
+    if ! SERVICE_ACCOUNT_ROLE_ARN=$(terraform output -raw video_streaming_service_account_role_arn 2>/dev/null); then
+        print_error "Failed to get service account IAM role ARN from Terraform outputs"
         exit 1
     fi
     
@@ -294,7 +300,7 @@ update_k8s_manifests() {
             -e "s|PLACEHOLDER_AWS_REGION|$AWS_REGION|g" \
             -e "s|PLACEHOLDER_DOMAIN|https://$DOMAIN_NAME|g" \
             -e "s|PLACEHOLDER_API_URL|$api_url|g" \
-            -e "s|PLACEHOLDER_IAM_ROLE_ARN|arn:aws:iam::$AWS_ACCOUNT_ID:role/${ENVIRONMENT}-video-streaming-eks-node-group-role|g" \
+            -e "s|PLACEHOLDER_IAM_ROLE_ARN|$SERVICE_ACCOUNT_ROLE_ARN|g" \
             "$file" > "$processed_file"
     done
     

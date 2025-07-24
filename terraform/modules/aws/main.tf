@@ -94,6 +94,8 @@ data "aws_availability_zones" "available" {
 
 data "aws_caller_identity" "current" {}
 
+data "aws_region" "current" {}
+
 # VPC and Networking
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
@@ -307,7 +309,7 @@ resource "aws_security_group" "rds" {
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.ecs.id]
+    security_groups = [aws_eks_cluster.main.vpc_config[0].cluster_security_group_id]
   }
 
   egress {
@@ -326,19 +328,6 @@ resource "aws_security_group" "rds" {
   }
 }
 
-# Additional security group rule to allow EKS access to RDS
-resource "aws_security_group_rule" "rds_from_eks" {
-  type                     = "ingress"
-  from_port                = 5432
-  to_port                  = 5432
-  protocol                 = "tcp"
-  source_security_group_id = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
-  security_group_id        = aws_security_group.rds.id
-  description              = "Allow EKS cluster to access RDS"
-
-  depends_on = [aws_eks_cluster.main]
-}
-
 resource "aws_security_group" "elasticache" {
   name_prefix = "${var.environment}-video-streaming-redis-"
   vpc_id      = aws_vpc.main.id
@@ -347,7 +336,7 @@ resource "aws_security_group" "elasticache" {
     from_port       = 6379
     to_port         = 6379
     protocol        = "tcp"
-    security_groups = [aws_security_group.ecs.id]
+    security_groups = [aws_eks_cluster.main.vpc_config[0].cluster_security_group_id]
   }
 
   tags = merge(var.common_tags, {
@@ -357,19 +346,6 @@ resource "aws_security_group" "elasticache" {
   lifecycle {
     create_before_destroy = true
   }
-}
-
-# Additional security group rule to allow EKS access to Redis
-resource "aws_security_group_rule" "redis_from_eks" {
-  type                     = "ingress"
-  from_port                = 6379
-  to_port                  = 6379
-  protocol                 = "tcp"
-  source_security_group_id = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
-  security_group_id        = aws_security_group.elasticache.id
-  description              = "Allow EKS cluster to access Redis"
-
-  depends_on = [aws_eks_cluster.main]
 }
 
 # RDS PostgreSQL Database
@@ -1220,4 +1196,9 @@ output "scraper_api_url" {
 output "cloudfront_domain" {
   description = "CloudFront distribution domain"
   value       = aws_cloudfront_distribution.main.domain_name
+}
+
+output "video_streaming_service_account_role_arn" {
+  description = "IAM role ARN for video streaming service account"
+  value       = aws_iam_role.video_streaming_service_account.arn
 }
